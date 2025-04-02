@@ -5,29 +5,6 @@
 #include <stdlib.h> 
 #include <stdbool.h>
 
-enum {
-  COMPILER_FILE_COMPILED_OK, 
-  COMPILER_FAILED_WITH_ERRORS 
-}; 
-
-struct compile_process { 
-  // Como o arquivo deve ser compilado 
-  int flags;
-
-  /* LAB 02*/
-  struct pos pos;
-  
-  struct compile_process_imput_file{
-    FILE* fp; 
-    const char* abs_path; 
-  } cfile; 
-  
-  FILE* ofile; 
-}; 
-
-int compile_file(const char* filename, const char* out_finename, int flags); 
-struct compile_process* compile_process_create(const char* filename, const char* filename_out, int flags);
-
 /* BEGIN - LAB 2 -----------------------------------------*/
 struct pos {
   int line; 
@@ -50,6 +27,30 @@ enum {
   TOKEN_TYPE_COMMENT,
   TOKEN_TYPE_NEWLINE
 };
+
+
+enum {
+  COMPILER_FILE_COMPILED_OK, 
+  COMPILER_FAILED_WITH_ERRORS 
+}; 
+
+struct compile_process { 
+  // Como o arquivo deve ser compilado 
+  int flags;
+
+  /* LAB 02*/
+  struct pos pos;
+  
+  struct compile_process_imput_file{
+    FILE* fp; 
+    const char* abs_path; 
+  } cfile; 
+  
+  FILE* ofile; 
+}; 
+
+int compile_file(const char* filename, const char* out_finename, int flags); 
+struct compile_process* compile_process_create(const char* filename, const char* filename_out, int flags);
 
 struct token{
   int type;
@@ -86,14 +87,14 @@ struct lex_process_functions {
 
 struct lex_process {
   struct pos pos;
-  struct token* token_vec;
+  struct vector* token_vec;
   struct compile_process* compiler;
 
 
   int current_expression_count; // Qts parenteses existem no momento
 
   struct buffer* parentheses_buffer;
-  struct lex_process_functions* functions;
+  struct lex_process_functions* function;
 
   void* private; // Dados privados que o lexer não entende mas o programador entende
 };
