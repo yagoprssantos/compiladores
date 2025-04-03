@@ -97,9 +97,32 @@ struct token* read_next_token(){
     // Fim do arquivo
     break;
 
+      // TOKEN_TYPE_NUMERIC_CASE
     NUMERIC_CASE:
       token = token_make_number();
     break;
+
+    // TOKEN_TYPE_NEWLINE_CASE
+    case '\n':
+      token = token_create(&(struct token){.type=TOKEN_TYPE_NEWLINE});
+      nextc();
+    break;
+    
+    // TOKEN_TYPE_COMMENT_CASE
+    case '/':
+      nextc();
+      // Caso do comentário "//"
+      if (peekc() == '/') {
+        struct buffer* buffer = buffer_create();
+        LEX_GETC_IF(buffer, c, (c != '\n' && c != EOF));
+        buffer_write(buffer, 0x00);
+        token = token_create(&(struct token){.type=TOKEN_TYPE_COMMENT, .sval=buffer_ptr(buffer)});
+        nextc();
+      } else {
+        pushc('/');
+      }
+    break;
+
 
     case ' ':
     case '\t':
