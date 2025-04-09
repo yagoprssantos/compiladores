@@ -25,6 +25,9 @@ struct pos {
     case '8':   \
     case '9'
 
+#define STRING_CASE \
+    case '"'
+
     enum {
     LEXICAL_ANALYSIS_ALL_OK ,
     LEXICAL_ANALYSIS_IMPUT_ERROR

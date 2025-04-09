@@ -60,6 +60,7 @@ static struct token* handle_whitespace() {
   return read_next_token();
 }
 
+// Funções para NUMERIC_CASE
 const char* read_number_str() {
   const char* num = NULL;
   struct buffer* buffer = buffer_create();
@@ -87,54 +88,98 @@ struct token* token_make_number(){
   return token_make_number_for_value(read_number());
 }
 
-// Função responsável por ler o próximo token do arquivo
-struct token* read_next_token(){
-  struct token* token = NULL;
-  char c = peekc();
-  switch (c)
-  {
-  case EOF:
-    // Fim do arquivo
-    break;
+// Funções para STRING_CASE
+const char* read_string() {
+    struct buffer* buffer = buffer_create();
+    char c = nextc(); // Consome a primeira aspas
 
-      // TOKEN_TYPE_NUMERIC_CASE
+    // Lê os caracteres até encontrar a aspas final ou EOF
+    while ((c = peekc()) != '"' && c != EOF) {
+        buffer_write(buffer, c);
+        nextc();
+    }
+
+    if (c == '"') {
+        nextc(); // Consome a última aspas
+    } else {
+        // Caso de erro: string não fechada
+        printf("Erro: String não fechada!\n");
+    }
+
+     // Finaliza a string
+    buffer_write(buffer, 0x00);
+
+    printf("Token: %s\n", buffer->data);
+    // Retorna o ponteiro para o buffer
+    return buffer_ptr(buffer);
+}
+
+struct token* token_make_string_for_value(const char* str) {
+  char* copied_str = strdup(str); // Copia a string para uma nova área de memória
+  return token_create(&(struct token){.type=TOKEN_TYPE_STRING, .sval=copied_str});
+}
+
+struct token* token_make_string() {
+  return token_make_string_for_value(read_string());
+}
+
+
+
+// Função responsável por ler o próximo token do arquivo
+struct token* read_next_token() {
+    struct token* token = NULL;
+    char c = peekc();
+
+    // Para depuração:
+    printf("Caractere atual: %c\n", c);
+
+    switch (c) {
+    case EOF:
+        // Fim do arquivo
+        break;
+
+    // TOKEN_TYPE_NUMERIC_CASE
     NUMERIC_CASE:
-      token = token_make_number();
-    break;
+        token = token_make_number();
+        break;
+
+    // TOKEN_TYPE_STRING_CASE
+    STRING_CASE:
+        token = token_make_string();
+        break;
+
+    // TOKEN_TYPE_COMMENT_CASE
+    case '/':
+        nextc();
+        if (peekc() == '/') {
+            struct buffer* buffer = buffer_create();
+            LEX_GETC_IF(buffer, c, (c != '\n' && c != EOF));
+            buffer_write(buffer, 0x00);
+            token = token_create(&(struct token){.type = TOKEN_TYPE_COMMENT, .sval = buffer_ptr(buffer)});
+            nextc();
+        } else {
+            pushc('/');
+        }
+        break;
 
     // TOKEN_TYPE_NEWLINE_CASE
     case '\n':
-      token = token_create(&(struct token){.type=TOKEN_TYPE_NEWLINE});
-      nextc();
-    break;
-    
-    // TOKEN_TYPE_COMMENT_CASE
-    case '/':
-      nextc();
-      // Caso do comentário "//"
-      if (peekc() == '/') {
-        struct buffer* buffer = buffer_create();
-        LEX_GETC_IF(buffer, c, (c != '\n' && c != EOF));
-        buffer_write(buffer, 0x00);
-        token = token_create(&(struct token){.type=TOKEN_TYPE_COMMENT, .sval=buffer_ptr(buffer)});
+        token = token_create(&(struct token){.type = TOKEN_TYPE_NEWLINE});
         nextc();
-      } else {
-        pushc('/');
-      }
-    break;
-
+        break;
 
     case ' ':
     case '\t':
-      token = handle_whitespace();
-    break;
+        token = handle_whitespace();
+        break;
 
     default:
-      // compiler_error(lex_process->compiler, "Token inválido!\n");
-      break;
-  }
+        printf("Caractere inválido ignorado: %c\n", c); // Depuração
+        nextc();
+        break;
+    }
 
-  return token;
+    return token;
 }
 
 int lex(struct lex_process* process) {
