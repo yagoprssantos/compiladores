@@ -28,6 +28,19 @@ struct pos {
 #define STRING_CASE \
     case '"'
 
+#define KEYWORD_CASE \
+    case 'u': case 's': case 'c': case 'i': case 'l': case 'f': case 'd': \
+    case 'v': case 'r': case 'e': case 'w': case 'b': case 't': case 'g': \
+    case 'k': case 'o': case 'n'
+
+#define OPERATOR_CASE \
+    case '+': case '-': case '*': case '>': case '<': case '^': case '%': \
+    case '!': case '=': case '~': case '|': case '&': case '(': case '['
+
+#define SYMBOL_CASE \
+    case '{': case '}': case ':': case ';': case '#': case '\\': case ')': \
+    case ']': case ',': case '.': case '?'
+
     enum {
     LEXICAL_ANALYSIS_ALL_OK ,
     LEXICAL_ANALYSIS_IMPUT_ERROR
