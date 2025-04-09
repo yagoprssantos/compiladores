@@ -1,6 +1,7 @@
 {
   "files.associations": {
     "buffer.h": "c",
-    "compiler.h": "c"
+    "compiler.h": "c",
+    "stdio.h": "c"
   }
 }

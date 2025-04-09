@@ -96,22 +96,29 @@ struct token* token_make_number(){
 // Funções para STRING_CASE
 const char* read_string() {
   struct buffer* buffer = buffer_create();
-  char c = nextc(); // Consome a primeira aspas
+  char start_quote = nextc(); // Consome a primeira aspas (simples ou dupla)
 
-  // Lê os caracteres até encontrar a aspas final ou EOF
-  while ((c = peekc()) != '"' && c != EOF) {
+  // Verifica se o delimitador inicial é válido
+  if (start_quote != '\'' && start_quote != '"') {
+      printf("Erro: Delimitador de string inválido!\n");
+      return NULL;
+  }
+
+  char c;
+  // Lê os caracteres até encontrar a mesma aspas de abertura ou EOF
+  while ((c = peekc()) != start_quote && c != EOF) {
       buffer_write(buffer, c);
       nextc();
   }
 
-  if (c == '"') {
+  if (c == start_quote) {
       nextc(); // Consome a última aspas
   } else {
       // Caso de erro: string não fechada
       printf("Erro: String não fechada!\n");
   }
 
-   // Finaliza a string
+  // Finaliza a string
   buffer_write(buffer, 0x00);
 
   printf("Token: %s (STRING)\n", buffer->data);
@@ -276,55 +283,79 @@ struct token* token_make_comment() {
 struct token* read_next_token() {
   struct token* token = NULL;
   char c = peekc();
-  
-    // Para depuração:
-    // printf("Caractere atual: %c\n", c);
 
   switch (c) {
     case EOF:
       // Fim do arquivo
-    break;
+      break;
+
+    // TOKEN_TYPE_COMMENT_CASE ou operador '/'
+    case '/':
+      nextc(); // Consome o primeiro '/'
+      if (peekc() == '/') {
+        // Trata como comentário de linha
+        nextc(); // Consome o segundo '/'
+        while ((c = peekc()) != '\n' && c != EOF) {
+          nextc(); // Consome o restante da linha
+        }
+        return read_next_token(); // Ignora o comentário e continua para o próximo token
+      } else if (peekc() == '*') {
+        // Trata como comentário de múltiplas linhas
+        nextc(); // Consome o '*'
+        while (true) {
+          c = nextc();
+          if (c == EOF) {
+            printf("Erro: Comentário de bloco não fechado!\n");
+            break;
+          }
+          if (c == '*' && peekc() == '/') {
+            nextc(); // Consome o '/'
+            break; // Fim do comentário de bloco
+          }
+        }
+        return read_next_token(); // Ignora o comentário e continua para o próximo token
+      } else {
+        // Adiciona o caractere '/' de volta ao fluxo
+        pushc('/'); 
+        token = token_make_operator();
+      }
+      break;
 
     // TOKEN_TYPE_NUMERIC_CASE
     NUMERIC_CASE:
-        token = token_make_number();
-    break;
+      token = token_make_number();
+      break;
 
     // TOKEN_TYPE_KEYWORD_CASE
     KEYWORD_CASE:
-        token = token_make_keyword_or_identifier();
-    break;
+      token = token_make_keyword_or_identifier();
+      break;
 
     // TOKEN_TYPE_OPERATOR_CASE
     OPERATOR_CASE:
-        token = token_make_operator();
-    break;
+      token = token_make_operator();
+      break;
 
     // TOKEN_TYPE_SYMBOL_CASE
     SYMBOL_CASE:
-        token = token_make_symbol();
-    break;
+      token = token_make_symbol();
+      break;
 
     // TOKEN_TYPE_STRING_CASE
     STRING_CASE:
-        token = token_make_string();
-    break;
-
-    // TOKEN_TYPE_COMMENT_CASE
-    case '/':
-      token = token_make_comment();
-    break;
+      token = token_make_string();
+      break;
 
     // TOKEN_TYPE_NEWLINE_CASE
     case '\n':
-        token = token_create(&(struct token){.type = TOKEN_TYPE_NEWLINE});
-        nextc();
-    break;
+      token = token_create(&(struct token){.type = TOKEN_TYPE_NEWLINE});
+      nextc();
+      break;
 
     case ' ':
     case '\t':
-        token = handle_whitespace();
-    break;
+      token = handle_whitespace();
+      break;
 
     default:
       if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
@@ -334,9 +365,9 @@ struct token* read_next_token() {
         nextc();
       }
       break;
-    }
+  }
 
-    return token;
+  return token;
 }
 
 int lex(struct lex_process* process) {

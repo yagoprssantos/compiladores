@@ -2,11 +2,10 @@
 
 /* Assim */
 
-// Função principal
 int main() {
   int a = 10;
   float b = 20.5;
-  char c = "x";
+  char c = 'x';
 
   // Operadores
   a = a + b - c * 2 / 1;

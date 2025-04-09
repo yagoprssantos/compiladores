@@ -26,7 +26,7 @@ struct pos {
     case '9'
 
 #define STRING_CASE \
-    case '"'
+    case '"': case '\''
 
 #define KEYWORD_CASE \
     case 'u': case 's': case 'c': case 'i': case 'l': case 'f': case 'd': \
