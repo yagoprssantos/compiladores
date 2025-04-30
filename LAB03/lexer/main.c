@@ -4,7 +4,7 @@
 #include "helpers/buffer.h" 
  
 int main() { 
-  printf("Compiladores - TURMA A -GRUPO 7\n");  
+  printf("Compiladores - TURMA A - GRUPO 7\n");  
 
     /* TESTE DAS FUNÇÕES HELPERS */
 

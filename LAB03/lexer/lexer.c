@@ -12,6 +12,42 @@
         nextc(); \
     }
 
+#define S_EQ(a, b) (strcmp((a), (b)) == 0)
+
+bool is_keyword(const char* str) { 
+    return  S_EQ(str, "unsigned")           ||
+            S_EQ(str, "signed")             ||
+            S_EQ(str, "char")               ||
+            S_EQ(str, "short")              ||
+            S_EQ(str, "int")                ||
+            S_EQ(str, "long")               ||
+            S_EQ(str, "float")              ||
+            S_EQ(str, "double")             ||
+            S_EQ(str, "void")               ||
+            S_EQ(str, "struct")             ||
+            S_EQ(str, "union")              ||
+            S_EQ(str, "static")             ||
+            S_EQ(str, "__ignore_typecheck")  ||
+            S_EQ(str, "return")             ||
+            S_EQ(str, "include")            ||
+            S_EQ(str, "sizeof")             ||
+            S_EQ(str, "if")                 ||
+            S_EQ(str, "else")               ||
+            S_EQ(str, "while")              ||
+            S_EQ(str, "for")                ||
+            S_EQ(str, "do")                 ||
+            S_EQ(str, "break")              ||
+            S_EQ(str, "continue")           ||
+            S_EQ(str, "switch")             ||
+            S_EQ(str, "case")               ||
+            S_EQ(str, "default")            ||
+            S_EQ(str, "goto")               ||
+            S_EQ(str, "typedef")            ||
+            S_EQ(str, "const")              ||
+            S_EQ(str, "extern")             ||
+            S_EQ(str, "retrict");
+}
+
 struct token* read_next_token();
 static struct lex_process* lex_process;
 static struct token tmp_token;
@@ -91,7 +127,7 @@ struct token* token_make_number() {
 static struct token* make_identifier_or_keyword() {
     struct buffer* buffer = buffer_create();
     char c;
-    LEX_GETC_IF(buffer, c, (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == '_'));
+    LEX_GETC_IF(buffer, c, (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == '_'));
 
     buffer_write(buffer, 0x00);
     printf("Token: %s\n", buffer->data);
@@ -112,38 +148,68 @@ struct token* read_special_token() {
     return NULL;
 }
 
-bool is_keyword(const char* str) { 
-    return  S_EQ(str, "unsigned")           ||
-            S_EQ(str, "signed")             ||
-            S_EQ(str, "char")               ||
-            S_EQ(str, "short")              ||
-            S_EQ(str, "int")                ||
-            S_EQ(str, "long")               ||
-            S_EQ(str, "float")              ||
-            S_EQ(str, "double")             ||
-            S_EQ(str, "void")               ||
-            S_EQ(str, "struct")             ||
-            S_EQ(str, "union")              ||
-            S_EQ(str, "static")             ||
-            S_EQ(str, "_ignore_typecheck")  ||
-            S_EQ(str, "return")             ||
-            S_EQ(str, "include")            ||
-            S_EQ(str, "sizeof")             ||
-            S_EQ(str, "if")                 ||
-            S_EQ(str, "else")               ||
-            S_EQ(str, "while")              ||
-            S_EQ(str, "for")                ||
-            S_EQ(str, "do")                 ||
-            S_EQ(str, "break")              ||
-            S_EQ(str, "continue")           ||
-            S_EQ(str, "switch")             ||
-            S_EQ(str, "case")               ||
-            S_EQ(str, "default")            ||
-            S_EQ(str, "goto")               ||
-            S_EQ(str, "typedef")            ||
-            S_EQ(str, "const")              ||
-            S_EQ(str, "extern")             ||
-            S_EQ(str, "retrict");
+static struct token *token_make_string(char start_delim, char end_delim) {
+    struct buffer *buf = buffer_create();
+    assert(nextc() == start_delim); // Verifica se o caractere inicial é aspas duplas
+    char c = nextc();
+
+    for (; c != end_delim && c != EOF; c = nextc()) {
+        if (c == '\\') {
+            // Retira o enter do final da string (se tiver)
+            continue;
+        }
+        buffer_write(buf, c);
+    }
+    buffer_write(buf, 0x00);
+    printf("Token: %s\n", buf->data);
+
+    struct token* token = token_create(&(struct token){.type=TOKEN_TYPE_STRING, .sval=buffer_ptr(buf)});
+    return token;    
+};
+
+int token_is_keyword(struct token* token, const char* keyword) {
+    return strcmp(token -> sval, keyword) == 0;
+}
+
+int is_operator_char(char c) {
+    switch (c) {
+        OPERATOR_CASE:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+char* read_op() {
+    char op[2] = {0}; // Temporary buffer
+    int len = 0;
+
+    char current = nextc();
+    op[len++] = current;
+
+    while (len < 2 - 1) {
+        char next = peekc();
+
+        if (is_operator_char(next)) {
+            op[len++] = nextc();
+        } else {
+            break;
+        }
+    }
+
+    op[len] = '\0';
+
+    // Copy to heap and return (caller should free)
+    char* result = malloc(len + 1);
+    strcpy(result, op);
+    return result;
+}
+
+static void lex_new_expression() {
+    lex_process->current_expression_count++;
+    if (lex_process->current_expression_count == 1) {
+        lex_process->parentheses_buffer = buffer_create();
+    }
 }
 
 static struct token *token_make_operator_or_string() {
@@ -163,13 +229,6 @@ static struct token *token_make_operator_or_string() {
     }
 
     return token;
-}
-
-static void lex_new_expression() {
-    lex_process->current_expression_count++;
-    if (lex_process->current_expression_count == 1) {
-        lex_process->parentheses_buffer = buffer_create();
-    }
 }
 
 static void lex_finish_expression() {
@@ -194,25 +253,6 @@ static struct token* token_make_symbol() {
     printf("Token: %c\n", c);
     return token;
 }
-
-static struct token *token_make_string(char start_delim, char end_delim) {
-    struct buffer *buf = buffer_create();
-    assert(nextc() == start_delim); // Verifica se o caractere inicial é aspas duplas
-    char c = nextc();
-
-    for (; c != end_delim && c != EOF; c = nextc()) {
-        if (c == '\\') {
-            // Retira o enter do final da string (se tiver)
-            continue;
-        }
-        buffer_write(buf, c);
-    }
-    buffer_write(buf, 0x00);
-    printf("Token: %s\n", buf->data);
-
-    struct token* token = token_create(&(struct token){.type=TOKEN_TYPE_STRING, .sval=buffer_ptr(buf)});
-    return token;    
-};
 
 struct token* token_make_one_line_comment() {
     struct buffer* buffer = buffer_create();
@@ -280,24 +320,30 @@ struct token* read_next_token() {
     {
     case EOF: /**/
         break;
+
     NUMERIC_CASE:
         token = token_make_number();
         break;
-    OPERATOR_CASE:
-        token = token_make_operator_or_string();
-        break;
+
     SYMBOL_CASE:
         token = token_make_symbol();
         break;
+
+    OPERATOR_CASE:
+        token = token_make_operator_or_string();
+        break;
+
     case '"':
         token = token_make_string('"', '"');
         break;
+
     case '\t':
     case ' ':
         token = handle_whitespace();
         break;
+
     case '\n':
-        token = handle_whitespace();
+        token = token_make_newline();
         break;
 
     default:

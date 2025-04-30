@@ -1,11 +1,11 @@
 #include <stdio.h>
 
-// teste de comentario
-
 int main() {
-  printf("Hello, World!\n");
+    int a = 1;
+    float b = 2;
+    double c = 3;
 
-  return 0;
+    // Teste de comentário
+
+    return (a + b) / c;
 }
-
-/* teste de comentario 2 */
