@@ -22,6 +22,12 @@ all: ${OBJECTS}
 ./build/lexer.o: ./lexer.c
 	gcc ./lexer.c ${INCLUDES} -o ./build/lexer.o -g -c
 
+./build/parse.o: ./parse.c
+	gcc ./parse.c ${INCLUDES} -o ./build/parse.o -g -c
+
+./build/node.o: ./node.c
+	gcc ./node.c ${INCLUDES} -o ./build/node.o -g -c
+
 clean: 
 	rm ./main 
 	rm -rf ${OBJECTS}
