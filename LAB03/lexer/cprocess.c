@@ -16,6 +16,8 @@ struct compile_process* compile_process_create(const char* filename, const char*
   }
 
   struct compile_process* process = calloc(1, sizeof(struct compile_process));
+  process->node_vec = vector_create(sizeof(struct node*)); 
+  process->node_tree_vec = vector_create(sizeof(struct node*));
   process->flags = flags;
   process->cfile.fp = file;
   process->ofile = out_file;
