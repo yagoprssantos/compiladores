@@ -3,5 +3,6 @@
     "buffer.h": "c",
     "compiler.h": "c",
     "stdio.h": "c"
-  }
+  },
+  "C_Cpp.default.compilerPath": "/usr/bin/gcc-12"
 }
