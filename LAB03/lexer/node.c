@@ -2,8 +2,8 @@
 #include "helpers/vector.h" 
 #include <assert.h>
 
-struct vector✶ node_vector = NULL;
-struct vector✶ node_vector_root = NULL;
+struct vector* node_vector = NULL;
+struct vector* node_vector_root = NULL;
 
 void node_set_vector(struct vector* vec, struct vector* root_vec) {
     node_vector = vec;

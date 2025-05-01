@@ -75,6 +75,11 @@ enum
 
 enum
 {
+    TOKEN_FLAG_TYPE = 1 << 0,  // Flag para identificar tokens de tipo
+};
+
+enum
+{
     NODE_TYPE_EXPRESSION,
     NODE_TYPE_EXPRESSION_PARENTHESES,
     NODE_TYPE_NUMBER,

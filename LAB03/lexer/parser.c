@@ -1,5 +1,6 @@
 #include "compiler.h" 
 #include "helpers/vector.h"
+#include "parser.h"
 
 static struct compile_process* current_process;
 
@@ -8,15 +9,7 @@ return 0;
 }
 
 int parse(struct compile_process* process) {
-    struct node node = NULL;
-    current_process = process;
-
-    vector_set_peek_pointer(process->token_vec, 0);
-
-    while (parse_next() == 0) {
-        //node = node_peek();
-        vector_push(process->node_tree_vec, &node);
-        
-    }  
-    return PARSE_ALL_OK; 
+    // Implementação básica do parser
+    // TODO: Implementar a análise sintática completa
+    return PARSE_ALL_OK;
 }

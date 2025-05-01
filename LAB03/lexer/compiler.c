@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include "parser.h"
 #include <stdarg.h>
 #include <stdlib.h>
 
