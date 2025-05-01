@@ -33,16 +33,26 @@ O repositório está organizado em pastas, cada uma representando um laboratóri
 
 - **Objetivo**: Introduzir conceitos de ponteiros e implementar a análise léxica do compilador.
 - **Atividades**:
-  - **Parte 1**: Manipulação de permissões e conversão de tipos de dados utilizando `union`.
-  - **Parte 2**: Uso de ponteiros para implementar operações matemáticas e manipulação de arrays de funções.
-  - **Parte 3**: Expansão do compilador com análise léxica básica.
-  - **Parte 4**: Implementação de um analisador léxico completo para identificar tokens em um arquivo de entrada.
+  - Manipulação de permissões e conversão de tipos de dados utilizando `union`.
+  - Uso de ponteiros para implementar operações matemáticas e manipulação de arrays de funções.
+  - Expansão do compilador com análise léxica básica.
+  - Implementação de um analisador léxico completo para identificar tokens em um arquivo de entrada.
 - **Resultados**:
   - Analisador léxico funcional, capaz de identificar números, strings, palavras-chave, operadores e símbolos.
 
 ---
 
-### **LAB03 - _a ser feito_**
+### **LAB03 - Análise Léxica Avançada e Introdução à Análise Sintática**
+
+- **Objetivo**: Refinar o analisador léxico e implementar a análise sintática inicial.
+- **Atividades**:
+  - Finalização da implementação de todos os tipos de tokens, incluindo suporte para números hexadecimais e binários.
+  - Implementação inicial do parser, responsável por construir a árvore de sintaxe abstrata (AST).
+  - Criação de estruturas para representar nós da AST, como `FUNCTION_NODE`, `VARIABLE_NODE`, `EXPRESSION_NODE`, entre outros.
+  - Atualização do `Makefile` para incluir os novos arquivos do parser.
+- **Resultados**:
+  - Analisador léxico refinado e funcional.
+  - Parser inicial implementado, com suporte básico para análise sintática.
 
 ---
 
@@ -72,3 +82,9 @@ O repositório está organizado em pastas, cada uma representando um laboratóri
    ```bash
    ./main
    ```
+
+## Testes e Resultados
+
+Cada laboratório inclui testes específicos para validar as funcionalidades implementadas. Os testes podem ser executados compilando o projeto e rodando o executável gerado. Consulte os arquivos `README.md` de cada laboratório para mais detalhes sobre os testes realizados e seus resultados.
+
+---
