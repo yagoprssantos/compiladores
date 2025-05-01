@@ -110,23 +110,58 @@ static struct token *handle_whitespace()
 
 const char *read_number_str()
 {
-    const char *num = NULL;
     struct buffer *buffer = buffer_create();
     char c = peekc();
-    LEX_GETC_IF(buffer, c, (c >= '0' && c <= '9'));
+
+    // Verifica prefixos para hexadecimal ou binário
+    if (c == '0')
+    {
+        buffer_write(buffer, nextc()); // Consome o '0'
+        c = peekc();
+        if (c == 'x' || c == 'X') // Hexadecimal
+        {
+            buffer_write(buffer, nextc()); // Consome o 'x'
+            LEX_GETC_IF(buffer, c, (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+        }
+        else if (c == 'b' || c == 'B') // Binário
+        {
+            buffer_write(buffer, nextc()); // Consome o 'b'
+            LEX_GETC_IF(buffer, c, (c == '0' || c == '1'));
+        }
+        else
+        {
+            // Não é hexadecimal ou binário, continua como número normal
+            LEX_GETC_IF(buffer, c, (c >= '0' && c <= '9'));
+        }
+    }
+    else
+    {
+        // Número decimal normal
+        LEX_GETC_IF(buffer, c, (c >= '0' && c <= '9'));
+    }
 
     // Finaliza a string
     buffer_write(buffer, 0x00);
-
-    printf("TOKEN\tNU: %s\n", buffer->data);
-    // Retorna o ponteiro para o buffer
     return buffer_ptr(buffer);
 }
 
 unsigned long long read_number()
 {
     const char *s = read_number_str();
-    return atoll(s);
+
+    // Detecta o prefixo e converte para decimal
+    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+    {
+        return strtoull(s, NULL, 16); // Hexadecimal
+    }
+    else if (s[0] == '0' && (s[1] == 'b' || s[1] == 'B'))
+    {
+        return strtoull(s + 2, NULL, 2); // Binário (ignora o "0b")
+    }
+    else
+    {
+        return atoll(s); // Decimal
+    }
 }
 
 struct token *token_make_number_for_value(unsigned long number)
@@ -136,7 +171,9 @@ struct token *token_make_number_for_value(unsigned long number)
 
 struct token *token_make_number()
 {
-    return token_make_number_for_value(read_number());
+    unsigned long long number = read_number();
+    printf("TOKEN\tNU: %llu\n", number); // Imprime apenas o número convertido
+    return token_make_number_for_value(number);
 }
 
 static struct token *make_identifier_or_keyword()
