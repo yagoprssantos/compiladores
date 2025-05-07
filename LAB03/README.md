@@ -6,7 +6,7 @@
 - João Victor Azevedo dos Santos
 - Yago Péres dos Santos
 
-### Laboratório 02
+### Laboratório 03
 
 Sala: 1002 - Turma A - 0225
 
