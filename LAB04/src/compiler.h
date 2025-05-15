@@ -79,6 +79,7 @@ struct token
 {
     int type;
     int flags;
+
     struct pos pos; // Identificar onde o token esta no arquivo.
 
     union
@@ -136,6 +137,7 @@ struct compile_process
     // Como o arquivo deve ser compilado
     int flags;
 
+    /* LAB2: Adicionar*/
     struct pos pos;
 
     struct compile_process_input_file
@@ -144,9 +146,9 @@ struct compile_process
         const char *abs_path;
     } cfile;
 
-    struct vector *token_vec;     // LAB3: Vetor de tokens da análise léxica
-    struct vector *node_vec;      // LAB3: Vetor de nodes da análise sintatica
-    struct vector *node_tree_vec; // LAB3: Raiz da arvore de analise
+    struct vector *token_vec;     /* LAB3: Vetor de tokens da análise léxica*/
+    struct vector *node_vec;      /* LAB3: Vetor de nodes da análise sintatica*/
+    struct vector *node_tree_vec; /* LAB3: Raiz da arvore de analise*/
 
     FILE *ofile;
 };
@@ -200,16 +202,13 @@ struct node
     int type;
     int flags;
     struct pos pos;
-
     struct node_binded
     {
         // Ponteiro para o body node.
         struct node *owner;
-
         // Ponteiro para a funcao que o node esta.
         struct node *funtion;
     } binded;
-
     // Estrutura similar ao token
     union
     {
@@ -220,7 +219,6 @@ struct node
         unsigned long long llnum;
         void *any;
     };
-
     union
     {
         struct exp

@@ -25,18 +25,33 @@ struct node *node_peek_or_null()
 
 struct node *node_peek()
 {
-    return *(struct node **)(vector_back(node_vector));
+    if (vector_empty(node_vector))
+    {
+        return NULL;
+    }
+    return vector_back_ptr(node_vector);
 }
 
 struct node *node_pop()
 {
+    // Check if vector is empty before any operations
+    if (vector_empty(node_vector))
+    {
+        return NULL;
+    }
+
     struct node *last_node = vector_back_ptr(node_vector);
-    struct node *last_node_root = vector_empty(node_vector) ? NULL : vector_back_ptr(node_vector_root);
+
+    // Safe check for root vector
+    struct node *last_node_root = vector_empty(node_vector_root) ? NULL : vector_back_ptr(node_vector_root);
 
     vector_pop(node_vector);
 
-    if (last_node == last_node_root)
+    // Only pop from root vector if needed and possible
+    if (last_node == last_node_root && !vector_empty(node_vector_root))
+    {
         vector_pop(node_vector_root);
+    }
 
     return last_node;
 }
