@@ -75,6 +75,19 @@ enum
     TOKEN_TYPE_NEWLINE
 };
 
+#define TOTAL_OPERADOR_GROUPS 14
+#define MAX_OPERATORS_IN_GROUP 12
+enum
+{
+    ASSOCIATIVITY_LEFT_TO_RIGTH,
+    ASSOCIATIVITY_RIGHT_TO_LEFT
+};
+struct expressionable_op_precedence_group
+{
+    char *operators[MAX_OPERATORS_IN_GROUP];
+    int associativity;
+};
+
 struct token
 {
     int type;
@@ -254,7 +267,7 @@ void compiler_warning(struct compile_process *compiler, const char *msg, ...);
 struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str);
 
 /* FUNCOES DO ARQUIVO PARSER.C */
-struct node* parse(struct compile_process *process);
+int parse(struct compile_process *process);
 
 /* FUNCOES DO ARQUIVO TOKEN.C */
 bool token_is_keyword(struct token *token, const char *value);

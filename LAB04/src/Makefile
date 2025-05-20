@@ -6,7 +6,9 @@ OBJECTS= 	./build/compiler.o \
 			./build/parser.o \
 			./build/node.o \
 			./build/helpers/buffer.o \
-			./build/helpers/vector.o
+			./build/helpers/vector.o \
+			./build/expressionable.o
+
 INCLUDES= -I./
 
 all: ${OBJECTS}
@@ -38,6 +40,9 @@ all: ${OBJECTS}
 
 ./build/helpers/vector.o: ./helpers/vector.c
 	gcc ./helpers/vector.c ${INCLUDES} -o ./build/helpers/vector.o -g -c
+
+./build/expressionable.o: ./expressionable.c
+	gcc ./expressionable.c ${INCLUDES} -o ./build/expressionable.o -g -c
 
 clean:
 	rm ./main
