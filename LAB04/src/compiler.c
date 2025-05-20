@@ -42,9 +42,11 @@ int compile_file(const char* filename, const char* out_finename, int flags){
     if (!lex_process) return COMPILER_FAILED_WITH_ERRORS;
 
     if (lex(lex_process) != LEXICAL_ANALYSIS_ALL_OK) return COMPILER_FAILED_WITH_ERRORS;  
+    
 
     
     process->token_vec = lex_process->token_vec;                                /* LAB3: Adicionar*/
+    
 
     /* AQUI ENTRA O PARSING DO CODIGO  */
     if (parse(process) != PARSE_ALL_OK) return COMPILER_FAILED_WITH_ERRORS;     /* LAB3: Adicionar*/

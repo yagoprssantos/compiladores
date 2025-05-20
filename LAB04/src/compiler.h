@@ -254,7 +254,7 @@ void compiler_warning(struct compile_process *compiler, const char *msg, ...);
 struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str);
 
 /* FUNCOES DO ARQUIVO PARSER.C */
-int parse(struct compile_process *process);
+struct node* parse(struct compile_process *process);
 
 /* FUNCOES DO ARQUIVO TOKEN.C */
 bool token_is_keyword(struct token *token, const char *value);

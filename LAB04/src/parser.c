@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include "helpers/vector.h"
+#include <stdio.h>
 
 static struct compile_process *current_process;
 static struct token *parser_last_token;
@@ -54,8 +55,9 @@ static struct token *token_peek_next()
     return vector_peek_no_increment(current_process->token_vec);
 }
 
-void parse_single_token_to_node()
+struct node* parse_single_token_to_node()
 {
+    
     struct token *token = token_next();
     struct node *node = NULL;
     switch (token->type)
@@ -70,9 +72,11 @@ void parse_single_token_to_node()
         node = node_create(&(struct node){.type = NODE_TYPE_STRING, .sval = token->sval});
         break;
     default:
-        compiler_error(current_process, "Esse token nao pode ser convertido para node!\n");
+       
         break;
     }
+    
+    return node;
 }
 
 void parse_expressionable_for_op(struct history *history, const char *op)
@@ -109,26 +113,66 @@ int parse_exp(struct history *history)
     return 0;
 }
 
+// Função principal para parsing de expressões com precedência
+struct node* parse_expression(int min_prec) {
+    struct token* token = token_peek_next();
+    struct node* left = NULL;
+    if (!token) return NULL;
+
+    // Lida com operandos (números, identificadores, etc)
+    if (token->type == TOKEN_TYPE_NUMBER || token->type == TOKEN_TYPE_IDENTIFIER) {
+        left = parse_single_token_to_node();
+    } else {
+        // Não é um operando válido
+        return NULL;
+    }
+
+    while (1) {
+        struct token* op_token = token_peek_next();
+        if (!op_token || op_token->type != TOKEN_TYPE_OPERATOR)
+            break;
+        int prec = operator_precedence(op_token->sval);
+        if (prec < min_prec)
+            break;
+        // Consome o operador
+        token_next();
+        // Recursão para a direita, com precedência maior
+        struct node* right = parse_expression(prec + 1);
+        if (!right) break;
+        make_exp_node(left, right, op_token->sval);
+        left = node_pop();
+    }
+    return left;
+}
+
+// Atualizar parse_expressionable_single para usar parse_expression
 int parse_expressionable_single(struct history *history)
 {
+    
     struct token *token = token_peek_next();
-    if (!token)
+    if (!token) {
+        
         return -1;
+    }
     history->flags |= NODE_FLAG_INSIDE_EXPRESSION;
     int res = -1;
+    struct node* node = NULL;
     switch (token->type)
     {
     case TOKEN_TYPE_NUMBER:
-        parse_single_token_to_node();
-        res = 0;
-        break;
-    case TOKEN_TYPE_OPERATOR:
-        parse_exp(history);
-        res = 0;
+    case TOKEN_TYPE_IDENTIFIER:
+        
+        node = parse_expression(0);
+        if (node) {
+            node_push(node);
+            res = 0;
+        }
         break;
     default:
-        break;
+        
+        return -1;
     }
+   
     return res;
 }
 
@@ -141,34 +185,56 @@ void parse_expressionable(struct history *history)
 
 int parse_next()
 {
+   
     struct token *token = token_peek_next();
-    if (!token)
+    if (!token) {
+       
         return -1;
+    }
     int res = 0;
     switch (token->type)
     {
     case TOKEN_TYPE_NUMBER:
     case TOKEN_TYPE_IDENTIFIER:
     case TOKEN_TYPE_STRING:
+        
         parse_expressionable(history_begin(0));
         break;
     default:
+       
         break;
     }
+    
     return 0;
 }
 
-int parse(struct compile_process *process)
+struct node* parse(struct compile_process *process)
 { /*LAB3: Adicionar o prototipo no compiler.h */
+   
     current_process = process;
     parser_last_token = NULL;
     struct node *node = NULL;
     node_set_vector(process->node_vec, process->node_tree_vec);
     vector_set_peek_pointer(process->token_vec, 0);
+    
     while (parse_next() == 0)
     {
         node = node_peek();
         vector_push(process->node_tree_vec, &node);
     }
-    return PARSE_ALL_OK;
+   
+    return node;
+}
+
+// Função para obter a precedência de um operador
+int operator_precedence(const char* op) {
+    if (!op) return -1;
+    if (S_EQ(op, "=")) return 1;  // atribuição tem menor precedência
+    if (S_EQ(op, "||")) return 2;
+    if (S_EQ(op, "&&")) return 3;
+    if (S_EQ(op, "==") || S_EQ(op, "!=")) return 4;
+    if (S_EQ(op, ">") || S_EQ(op, "<") || S_EQ(op, ">=") || S_EQ(op, "<=")) return 5;
+    if (S_EQ(op, "+") || S_EQ(op, "-")) return 6;
+    if (S_EQ(op, "*") || S_EQ(op, "/") || S_EQ(op, "%")) return 7;
+    return -1;
 }
