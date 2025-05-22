@@ -79,6 +79,16 @@ void parse_single_token_to_node()
         compiler_error(current_process, "Esse token nao pode ser convertido para node!\n");
         break;
     }
+
+    // Verifica se o nó foi criado com sucesso
+    if (node)
+    {
+        node_push(node);
+    }
+    else
+    {
+        printf("ERRO: Falha ao criar nó para token: %d\n", token->type);
+    }
 }
 
 void parse_expressionable_for_op(struct history *history, const char *op)
@@ -107,23 +117,45 @@ void parser_node_shift_children_left(struct node *node)
 void parser_reorder_expression(struct node **node_out)
 {
     struct node *node = *node_out;
-    // Se o node nao for do tipo expressao, finalizar.
-    if (node->type != NODE_TYPE_EXPRESSION)
+
+    // Only reorder expression nodes
+    if (!node || node->type != NODE_TYPE_EXPRESSION)
         return;
-    // Se o node nao tiver filhos que sejam expressoes, finalizar.
-    if (node->exp.left->type != NODE_TYPE_EXPRESSION && node->exp.right && node->exp.right->type != NODE_TYPE_EXPRESSION)
-        return;
-    if (node->exp.left->type != NODE_TYPE_EXPRESSION && node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
+
+    // Recurse into sub-expressions first
+    if (node->exp.left && node->exp.left->type == NODE_TYPE_EXPRESSION)
+        parser_reorder_expression(&node->exp.left);
+
+    if (node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
+        parser_reorder_expression(&node->exp.right);
+
+    // Now check if the right expression has higher precedence
+    if (node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
     {
-        const char *op = node->exp.right->exp.op;
+        const char *current_op = node->exp.op;
         const char *right_op = node->exp.right->exp.op;
-        if (parser_left_op_has_priority(node->exp.op, right_op))
+
+        if (parser_left_op_has_priority(current_op, right_op))
         {
-            // EX: 50*E(20+50) -> E(50*20)+50
-            parser_node_shift_children_left(node);
-            // Reordenar a arvore depois do shift ser realizado.
+            // Get nodes A, B, C
+            struct node *A = node->exp.left;
+            struct node *B = node->exp.right->exp.left;
+            struct node *C = node->exp.right->exp.right;
+
+            // Save the operator from the right expression
+            const char *new_op = right_op;
+
+            // Create (A op B) subtree
+            make_exp_node(A, B, current_op);
+            struct node *new_left = node_pop();
+
+            // Update current node: (A op B) new_op C
+            node->exp.left = new_left;
+            node->exp.right = C;
+            node->exp.op = new_op;
+
+            // Check if we need to further reorder the new left subtree
             parser_reorder_expression(&node->exp.left);
-            parser_reorder_expression(&node->exp.right);
         }
     }
 }
@@ -151,26 +183,38 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
     struct expressionable_op_precedence_group *group_left = NULL;
     struct expressionable_op_precedence_group *group_right = NULL;
 
-    // Se os operadores forem os mesmos, retornar falso.
-    if (S_EQ(op_left, op_right))
-        return false;
-
     int precedence_left = parser_get_precedence_for_operator(op_left, &group_left);
     int precedence_right = parser_get_precedence_for_operator(op_right, &group_right);
 
-    // Essa funcao so trata de associatividade esquerda para direita
-    if (group_left->associativity == ASSOCIATIVITY_RIGHT_TO_LEFT)
-        return false;
+    // Compara os precedentes
+    if (precedence_left != precedence_right)
+    {
+        return precedence_left < precedence_right;
+    }
 
-    return precedence_left <= precedence_right;
+    // Igual -> Confere associatividade
+    if (group_left && group_left->associativity == ASSOCIATIVITY_LEFT_TO_RIGTH)
+    {
+        return false;
+    }
+
+    // Associatividade direita -> esquerda prioridade
+    if (group_left && group_left->associativity == ASSOCIATIVITY_RIGHT_TO_LEFT)
+    {
+        return true;
+    }
+
+    return false;
 }
 
 void parse_exp_normal(struct history *history)
 {
     struct token *op_token = token_peek_next();
+    if (!op_token)
+        return;
     const char *op = op_token->sval;
-    struct node *node_left = node_peek_expressionable_or_null();
 
+    struct node *node_left = node_peek_expressionable_or_null();
     if (!node_left)
         return;
 
@@ -252,23 +296,100 @@ int parse_next()
     return 0;
 }
 
+// Para imprimir árvore e seus nós
+void print_node_type(struct node *node)
+{
+    if (!node)
+    {
+        printf("NULL");
+        return;
+    }
+
+    switch (node->type)
+    {
+    case NODE_TYPE_NUMBER:
+        printf("NUMBER (%u)", node->inum);
+        break;
+    case NODE_TYPE_IDENTIFIER:
+        printf("IDENTIFIER (%s)", node->sval ? node->sval : "null");
+        break;
+    case NODE_TYPE_STRING:
+        printf("STRING (\"%s\")", node->sval ? node->sval : "null");
+        break;
+    case NODE_TYPE_EXPRESSION:
+        printf("EXPRESSION (op: %s)", node->exp.op ? node->exp.op : "null");
+        break;
+    case NODE_TYPE_UNARY:
+        printf("UNARY (op: %s)", node->exp.op ? node->exp.op : "null");
+        break;
+    case NODE_TYPE_EXPRESSION_PARENTHESES:
+        printf("PAREN_EXPR");
+        break;
+    default:
+        printf("UNKNOWN (type %d)", node->type);
+        break;
+    }
+}
+
+void print_node_tree(struct node *node, int indent, bool is_last)
+{
+    if (!node)
+    {
+        for (int i = 0; i < indent; ++i)
+        {
+            printf("│   ");
+        }
+        printf("%sNULL\n", is_last ? "└── " : "├── ");
+        return;
+    }
+
+    for (int i = 0; i < indent; ++i)
+    {
+        printf("│   ");
+    }
+
+    printf("%s", is_last ? "└── " : "├── ");
+    print_node_type(node);
+    printf("\n");
+
+    if (node->type == NODE_TYPE_EXPRESSION ||
+        node->type == NODE_TYPE_UNARY ||
+        node->type == NODE_TYPE_EXPRESSION_PARENTHESES)
+    {
+        print_node_tree(node->exp.left, indent + 1, false);
+        print_node_tree(node->exp.right, indent + 1, true);
+    }
+}
+
 int parse(struct compile_process *process)
 {
+    // Retorna caso tenha algum erro
+    if (!process || !process->node_tree_vec || !process->token_vec || !process->node_vec)
+    {
+        return PARSE_GENERAL_ERROR;
+    }
     current_process = process;
     parser_last_token = NULL;
-    struct node *node = NULL;
     node_set_vector(process->node_vec, process->node_tree_vec);
     vector_set_peek_pointer(process->token_vec, 0);
 
-    // Adicionado para evitar loop infinito
-    int max_iterations = process->token_vec->count * 2;
-    int i = 0;
-
-    while (parse_next() == 0 && i++ < max_iterations)
+    // Imprime arvore de nodes
+    struct node *node = node_peek();
+    printf("\n\nArvore de nodes:\n");
+    while (parse_next() == 0)
     {
         node = node_peek();
-        vector_push(process->node_tree_vec, &node);
-    }
 
+        if (!node)
+        {
+            printf("Warning: node_peek() returned NULL\n");
+            break;
+        }
+
+        vector_push(process->node_tree_vec, &node);
+
+        print_node_tree(node, 0, true);
+        printf("\n\n");
+    }
     return PARSE_ALL_OK;
 }
