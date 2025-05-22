@@ -4,6 +4,7 @@
 
 - Isabela Garcia Godinho
 - João Victor Azevedo dos Santos
+- Luiz Eduardo Campos Dias
 - Yago Péres dos Santos
 
 ### Laboratório 04

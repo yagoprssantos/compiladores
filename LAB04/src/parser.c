@@ -107,25 +107,20 @@ void parser_node_shift_children_left(struct node *node)
 void parser_reorder_expression(struct node **node_out)
 {
     struct node *node = *node_out;
-
     // Se o node nao for do tipo expressao, finalizar.
     if (node->type != NODE_TYPE_EXPRESSION)
         return;
-
     // Se o node nao tiver filhos que sejam expressoes, finalizar.
-    if (node->exp.left != NODE_TYPE_EXPRESSION && node->exp.right && node->exp.right != NODE_TYPE_EXPRESSION)
+    if (node->exp.left->type != NODE_TYPE_EXPRESSION && node->exp.right && node->exp.right->type != NODE_TYPE_EXPRESSION)
         return;
-
-    if (node->exp.left != NODE_TYPE_EXPRESSION && node->exp.right && node->exp.right == NODE_TYPE_EXPRESSION)
+    if (node->exp.left->type != NODE_TYPE_EXPRESSION && node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
     {
         const char *op = node->exp.right->exp.op;
         const char *right_op = node->exp.right->exp.op;
-
         if (parser_left_op_has_priority(node->exp.op, right_op))
         {
             // EX: 50*E(20+50) -> E(50*20)+50
             parser_node_shift_children_left(node);
-
             // Reordenar a arvore depois do shift ser realizado.
             parser_reorder_expression(&node->exp.left);
             parser_reorder_expression(&node->exp.right);
@@ -133,7 +128,7 @@ void parser_reorder_expression(struct node **node_out)
     }
 }
 
-static bool parser_get_precedence_for_operator(const char *op, struct expressionable_op_precedence_group **group_out)
+static int parser_get_precedence_for_operator(const char *op, struct expressionable_op_precedence_group **group_out)
 {
     *group_out = NULL;
     for (int i = 0; i < TOTAL_OPERADOR_GROUPS; i++)
@@ -258,16 +253,22 @@ int parse_next()
 }
 
 int parse(struct compile_process *process)
-{ /*LAB3: Adicionar o prototipo no compiler.h */
+{
     current_process = process;
     parser_last_token = NULL;
     struct node *node = NULL;
     node_set_vector(process->node_vec, process->node_tree_vec);
     vector_set_peek_pointer(process->token_vec, 0);
-    while (parse_next() == 0)
+
+    // Adicionado para evitar loop infinito
+    int max_iterations = process->token_vec->count * 2;
+    int i = 0;
+
+    while (parse_next() == 0 && i++ < max_iterations)
     {
         node = node_peek();
         vector_push(process->node_tree_vec, &node);
     }
+
     return PARSE_ALL_OK;
 }

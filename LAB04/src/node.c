@@ -56,6 +56,10 @@ struct node *node_pop()
     return last_node;
 }
 
+void print_tree(struct node *node, int level)
+{
+}
+
 // Tipos de nos que podem ser colocados dentro de uma expressao.
 bool node_is_expressionable(struct node *node)
 {

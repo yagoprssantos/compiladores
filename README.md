@@ -8,6 +8,7 @@ Este repositório contém os trabalhos realizados pelo **Grupo 7** na disciplina
 
 - **Isabela Garcia Godinho**
 - **João Victor Azevedo dos Santos**
+- **Luiz Eduardo Campos Dias**
 - **Yago Péres dos Santos**
 
 ## Estrutura do Repositório
