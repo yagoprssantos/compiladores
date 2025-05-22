@@ -57,7 +57,24 @@ O repositório está organizado em pastas, cada uma representando um laboratóri
 
 ---
 
-### **LAB04 - _a ser feito_**
+### **LAB04 - Análise Sintática e Manipulação de Expressões**
+
+- **Objetivo**: Evoluir o compilador com a implementação da análise sintática completa e manipulação de expressões, além do refinamento do analisador léxico.
+- **Atividades**:
+  - Implementação e integração de novos módulos para análise sintática (parser) e manipulação de expressões.
+  - Criação e manipulação de estruturas auxiliares, como vetores dinâmicos (`vector`) e buffers (`buffer`).
+  - Desenvolvimento do núcleo do compilador, incluindo controle de arquivos, flags e integração entre analisador léxico e sintático.
+  - Implementação do analisador léxico com suporte a números, operadores, palavras-chave, símbolos, strings e comentários.
+  - Construção da árvore de sintaxe abstrata (AST) e definição dos nós para funções, variáveis e expressões.
+  - Implementação da análise e avaliação de expressões, incluindo precedência de operadores.
+  - Geração de saída intermediária ou código a partir da AST.
+  - Criação de testes de unidade e integração para validar análise léxica, sintática e precedência de operadores.
+  - Automatização da compilação com `Makefile`.
+- **Resultados**:
+  - Compilador com análise léxica e sintática integradas, capaz de construir a AST e manipular expressões com precedência correta.
+  - Estruturas auxiliares robustas para vetores e buffers.
+  - Testes validados para os principais módulos do compilador.
+  - Processo de compilação automatizado via `Makefile`.
 
 ---
 
