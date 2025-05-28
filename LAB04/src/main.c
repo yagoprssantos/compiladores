@@ -8,7 +8,7 @@ int main(int argc, char const *argv[])
     char *input_file = NULL;
     char *output_file = NULL;
 
-    printf("Compiladores - TURMA A/B - GRUPO 7\n\n");
+    printf("Compiladores - TURMA A - GRUPO 7\n\n");
 
     if (argc > 1)
     {
