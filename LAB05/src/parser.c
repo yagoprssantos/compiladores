@@ -114,6 +114,7 @@ void parse_single_token_to_node()
 
 void parse_expressionable_for_op(struct history *history, const char *op)
 {
+    if (!op) return;
     parse_expressionable(history);
 }
 
@@ -231,13 +232,12 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
 void parse_exp_normal(struct history *history)
 {
     struct token *op_token = token_peek_next();
-    if (!op_token)
-        return;
+    if (!op_token) return;
     const char *op = op_token->sval;
+    if (!op) return;
 
     struct node *node_left = node_peek_expressionable_or_null();
-    if (!node_left)
-        return;
+    if (!node_left) return;
 
     // Retira da lista de tokens o token de operador. Ex: "123+456", retira o token "+".
     token_next();
@@ -348,13 +348,30 @@ int parser_get_random_type_index() {
 }
 
 struct token* parser_build_random_type_name() {// LAB5
-    char tmp_name[25];
-    sprintf(tmp_name, "customtypename_%i", parser_get_random_type_index());
-    char *sval = malloc(sizeof(tmp_name));
-    strncpy(sval, tmp_name, sizeof(tmp_name));
+    static int counter = 0;
+    char tmp_name[32];
+    snprintf(tmp_name, sizeof(tmp_name), "__anonymous_type_%d", counter++);
+    
+    // Aloca memória para o nome e copia
+    char* sval = malloc(strlen(tmp_name) + 1);
+    if (!sval) {
+        compiler_error(current_process, "Falha ao alocar memória para nome de tipo anônimo\n");
+        return NULL;
+    }
+    strcpy(sval, tmp_name);
+    
+    // Cria o token
     struct token* token = calloc(1, sizeof(struct token));
+    if (!token) {
+        free(sval);
+        compiler_error(current_process, "Falha ao alocar memória para token de tipo anônimo\n");
+        return NULL;
+    }
+    
     token->type = TOKEN_TYPE_IDENTIFIER;
     token->sval = sval;
+    token->pos = current_process->pos; // Mantém a posição atual do arquivo
+    
     return token;
 }
 
@@ -590,13 +607,28 @@ void parse_datatype_type(struct datatype* dtype) { // LAB5
     struct token* datatype_token = NULL;
     struct token* datatype_secundary_token = NULL;
     parser_get_datatype_tokens(&datatype_token, &datatype_secundary_token);
+    
+    if (!datatype_token) {
+        compiler_error(current_process, "Esperado tipo após modificadores\n");
+        return;
+    }
+
     int expected_type = parser_datatype_expected_for_type_string(datatype_token->sval);
     if (S_EQ(datatype_token->sval, "union") || S_EQ(datatype_token->sval, "struct")) {
         // Caso da struct com nome.
-        if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER) {
+        struct token* next_token = token_peek_next();
+        if (!next_token) {
+            compiler_error(current_process, "Esperado identificador após struct/union\n");
+            return;
+        }
+        if (next_token->type == TOKEN_TYPE_IDENTIFIER) {
             datatype_token = token_next();
         } else { // Caso da struct sem nome -> gerar nome aleatorio.
             datatype_token = parser_build_random_type_name();
+            if (!datatype_token) {
+                compiler_error(current_process, "Falha ao gerar nome para tipo anônimo\n");
+                return;
+            }
             dtype->flags |= DATATYPE_FLAG_IS_STRUCT_UNION_NO_NAME;
         }
     }
@@ -607,6 +639,8 @@ void parse_datatype_type(struct datatype* dtype) { // LAB5
 
 void parse_datatype_modifiers(struct datatype* dtype) { // LAB5
     struct token* token = token_peek_next();
+    if (!token) return;
+
     while (token && token->type == TOKEN_TYPE_KEYWORD) {
         if (!is_keyword_variable_modifier(token->sval)) break;
         if (S_EQ(token->sval, "signed")) {
@@ -637,14 +671,77 @@ void parse_datatype(struct datatype* dtype) { // LAB5
 }
 
 void parse_variable_function_or_struct_union(struct history* history) { // LAB5
+    // Parse o datatype
     struct datatype dtype;
     parse_datatype(&dtype);
+
+    // Pega o próximo token que deve ser o identificador
+    struct token* identifier_token = token_peek_next();
+    if (!identifier_token || identifier_token->type != TOKEN_TYPE_IDENTIFIER) {
+        compiler_error(current_process, "Esperado identificador após tipo\n");
+        return;
+    }
+
+    // Cria o node para a variável
+    struct node* node = node_create(&(struct node){
+        .type = NODE_TYPE_VARIABLE,
+        .pos = identifier_token->pos,
+        .sval = identifier_token->sval
+    });
+
+    if (!node) {
+        compiler_error(current_process, "Falha ao criar node para variável\n");
+        return;
+    }
+
+    // Armazena o datatype no node
+    node->any = malloc(sizeof(struct datatype));
+    if (!node->any) {
+        compiler_error(current_process, "Falha ao alocar memória para datatype\n");
+        return;
+    }
+    memcpy(node->any, &dtype, sizeof(struct datatype));
+
+    // Adiciona o node à pilha
+    node_push(node);
+
+    // Avança para o próximo token
+    token_next();
 }
 
 void parse_keyword(struct history *history) { // LAB 5
     struct token* token = token_peek_next();
+    if (!token) return;
+
     if (is_keyword_variable_modifier(token->sval) || keyword_is_datatype(token->sval)) {
-        parse_variable_function_or_struct_union(history);
+        // Cria um novo node para a declaração
+        struct node* node = node_create(&(struct node){
+            .type = NODE_TYPE_VARIABLE,
+            .pos = token->pos
+        });
+        
+        if (!node) {
+            compiler_error(current_process, "Falha ao criar node para declaração\n");
+            return;
+        }
+
+        // Parse o datatype
+        struct datatype dtype;
+        parse_datatype(&dtype);
+        
+        // Armazena o datatype no node
+        node->any = malloc(sizeof(struct datatype));
+        if (!node->any) {
+            compiler_error(current_process, "Falha ao alocar memória para datatype\n");
+            return;
+        }
+        memcpy(node->any, &dtype, sizeof(struct datatype));
+
+        // Adiciona o node à pilha
+        node_push(node);
         return;
     }
+
+    // TODO: Implementar outros tipos de keywords (if, while, etc)
+    compiler_error(current_process, "Keyword não implementada: %s\n", token->sval);
 }
