@@ -164,6 +164,16 @@ struct compile_process
     struct vector *node_tree_vec; /* LAB3: Raiz da arvore de analise*/
 
     FILE *ofile;
+
+    struct {
+        struct scope* root;
+        struct scope* current;
+    } scope;
+
+    struct {
+        struct vector* table;
+        struct vector* tables;
+    } symbols;
 };
 
 enum
@@ -334,5 +344,26 @@ struct node *node_peek_expressionable_or_null();
 bool node_is_expressionable(struct node *node);
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op);
 struct node *node_create(struct node *_node);
+
+enum {
+    SYMBOL_TYPE_NODE,
+    SYMBOL_TYPE_NATIVE_FUNCTION,
+    SYMBOL_TYPE_UNKNOWN
+};
+
+struct symbol {
+    const char* name;
+    int type;
+    void* data;
+};
+
+struct scope {
+    int flags;
+    struct vector* entities;
+    // Quantidade total de bytes do escopo.
+    size_t size;
+    // NULL se nao tiver pai.
+    struct scope* parent;
+};
 
 #endif
