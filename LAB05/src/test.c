@@ -1,7 +1,4 @@
-#include <stdio.h>
+int a, b, c, d, e;
+float aa, bb, cc;
 
-int main()
-{
-  printf("Hello, World!\n");
-  return 0;
-}
+1 + 2 + 1

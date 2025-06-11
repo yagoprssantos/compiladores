@@ -176,84 +176,7 @@ struct compile_process
     } symbols;
 };
 
-enum
-{
-    NODE_TYPE_EXPRESSION,
-    NODE_TYPE_EXPRESSION_PARENTHESES,
-    NODE_TYPE_NUMBER,
-    NODE_TYPE_IDENTIFIER,
-    NODE_TYPE_STRING,
-    NODE_TYPE_VARIABLE,
-    NODE_TYPE_VARIABLE_LIST,
-    NODE_TYPE_FUNCTION,
-    NODE_TYPE_BODY,
-    NODE_TYPE_STATEMENT_RETURN,
-    NODE_TYPE_STATEMENT_IF,
-    NODE_TYPE_STATEMENT_ELSE,
-    NODE_TYPE_STATEMENT_WHILE,
-    NODE_TYPE_STATEMENT_DO_WHILE,
-    NODE_TYPE_STATEMENT_FOR,
-    NODE_TYPE_STATEMENT_BREAK,
-    NODE_TYPE_STATEMENT_CONTINUE,
-    NODE_TYPE_STATEMENT_SWITCH,
-    NODE_TYPE_STATEMENT_CASE,
-    NODE_TYPE_STATEMENT_DEFAULT,
-    NODE_TYPE_STATEMENT_GOTO,
-    NODE_TYPE_UNARY,
-    NODE_TYPE_TENARY,
-    NODE_TYPE_LABEL,
-    NODE_TYPE_STRUCT,
-    NODE_TYPE_UNION,
-    NODE_TYPE_BRACKET,
-    NODE_TYPE_CAST,
-    NODE_TYPE_BLANK
-};
-
-enum
-{
-    PARSE_ALL_OK,
-    PARSE_GENERAL_ERROR
-};
-
-enum
-{
-    NODE_FLAG_INSIDE_EXPRESSION = 0b00000001
-};
-
-struct node
-{
-    int type;
-    int flags;
-    struct pos pos;
-    struct node_binded
-    {
-        // Ponteiro para o body node.
-        struct node *owner;
-        // Ponteiro para a funcao que o node esta.
-        struct node *funtion;
-    } binded;
-    // Estrutura similar ao token
-    union
-    {
-        char cval;
-        const char *sval;
-        unsigned int inum;
-        unsigned long lnum;
-        unsigned long long llnum;
-        void *any;
-    };
-    union
-    {
-        struct exp
-        {
-            struct node *left;
-            struct node *right;
-            const char *op;
-        } exp;
-    };
-};
-
-enum {
+    enum {
     DATATYPE_FLAG_IS_SIGNED = 0b00000001,
     DATATYPE_FLAG_IS_STATIC = 0b00000010,
     DATATYPE_FLAG_IS_CONST = 0b00000100,
@@ -303,6 +226,111 @@ struct datatype {
     };
 };
 
+enum {
+    NODE_TYPE_EXPRESSION,
+    NODE_TYPE_EXPRESSION_PARENTHESES,
+    NODE_TYPE_NUMBER,
+    NODE_TYPE_IDENTIFIER,
+    NODE_TYPE_STRING,
+    NODE_TYPE_VARIABLE,
+    NODE_TYPE_VARIABLE_LIST,
+    NODE_TYPE_FUNCTION,
+    NODE_TYPE_BODY,
+    NODE_TYPE_STATEMENT_RETURN,
+    NODE_TYPE_STATEMENT_IF,
+    NODE_TYPE_STATEMENT_ELSE,
+    NODE_TYPE_STATEMENT_WHILE,
+    NODE_TYPE_STATEMENT_DO_WHILE,
+    NODE_TYPE_STATEMENT_FOR,
+    NODE_TYPE_STATEMENT_BREAK,
+    NODE_TYPE_STATEMENT_CONTINUE,
+    NODE_TYPE_STATEMENT_SWITCH,
+    NODE_TYPE_STATEMENT_CASE,
+    NODE_TYPE_STATEMENT_DEFAULT,
+    NODE_TYPE_STATEMENT_GOTO,
+    NODE_TYPE_UNARY,
+    NODE_TYPE_TENARY,
+    NODE_TYPE_LABEL,
+    NODE_TYPE_STRUCT,
+    NODE_TYPE_UNION,
+    NODE_TYPE_BRACKET,
+    NODE_TYPE_CAST,
+    NODE_TYPE_BLANK
+};
+
+enum {
+    PARSE_ALL_OK,
+    PARSE_GENERAL_ERROR
+};
+
+enum {
+    NODE_FLAG_INSIDE_EXPRESSION = 0b00000001
+};
+
+struct node
+{
+    int type;
+    int flags;
+    struct pos pos;
+    struct node_binded
+    {
+        // Ponteiro para o body node.
+        struct node *owner;
+        // Ponteiro para a funcao que o node esta.
+        struct node *funtion;
+    } binded;
+    // Estrutura similar ao token
+    union
+    {
+        char cval;
+        const char *sval;
+        unsigned int inum;
+        unsigned long lnum;
+        unsigned long long llnum;
+        void *any;
+    };
+    union
+    {
+        struct exp
+        {
+            struct node *left;
+            struct node *right;
+            const char *op;
+        } exp;
+        struct var {
+            struct datatype type;
+            const char* name;
+            struct node* val;
+        } var;
+        struct varlist {
+            struct vector* list;
+        } var_list;
+    };
+};
+
+enum {
+    SYMBOL_TYPE_NODE,
+    SYMBOL_TYPE_NATIVE_FUNCTION,
+    SYMBOL_TYPE_UNKNOWN
+};
+
+struct symbol {
+    const char* name;
+    int type;
+    void* data;
+};
+
+struct scope {
+    int flags;
+    struct vector* entities;
+    // Quantidade total de bytes do escopo.
+    size_t size;
+    // NULL se nao tiver pai.
+    struct scope* parent;
+};
+
+bool token_is_operator(struct token* token, const char* val);
+
 /* FUNCOES DO ARQUIVO CPROCESS.C */
 char compile_process_next_char(struct lex_process *lex_process);
 char compile_process_peek_char(struct lex_process *lex_process);
@@ -326,8 +354,18 @@ void compiler_warning(struct compile_process *compiler, const char *msg, ...);
 /* CONTROI UM TOKEN A PARTIR DE UMA STRING */
 struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str);
 
+/* Estrutura para passar comandos atraves de funcoes recursivas. */
+struct history {
+    int flags;
+};
+
 /* FUNCOES DO ARQUIVO PARSER.C */
 int parse(struct compile_process *process);
+void parse_variable(struct datatype* dtype, struct token* name_token, struct history* history);
+void make_variable_node_and_register(struct history* history, struct datatype* dtype, struct token* name_token, struct node* value_node);
+void make_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node);
+void parse_variable_function_or_struct_union(struct history* history);
+void parse_expressionable_root(struct history* history);
 
 /* FUNCOES DO ARQUIVO TOKEN.C */
 bool token_is_keyword(struct token *token, const char *value);
@@ -344,26 +382,5 @@ struct node *node_peek_expressionable_or_null();
 bool node_is_expressionable(struct node *node);
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op);
 struct node *node_create(struct node *_node);
-
-enum {
-    SYMBOL_TYPE_NODE,
-    SYMBOL_TYPE_NATIVE_FUNCTION,
-    SYMBOL_TYPE_UNKNOWN
-};
-
-struct symbol {
-    const char* name;
-    int type;
-    void* data;
-};
-
-struct scope {
-    int flags;
-    struct vector* entities;
-    // Quantidade total de bytes do escopo.
-    size_t size;
-    // NULL se nao tiver pai.
-    struct scope* parent;
-};
 
 #endif

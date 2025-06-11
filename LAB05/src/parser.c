@@ -5,12 +5,6 @@
 static struct compile_process *current_process;
 static struct token *parser_last_token;
 
-// Estrutura para passar comandos atraves de funcoes recursivas.
-struct history
-{
-    int flags;
-};
-
 void parse_expressionable(struct history *history);
 int parse_expressionable_single(struct history *history);
 
@@ -429,18 +423,30 @@ int parse_next()
     struct token *token = token_peek_next();
     if (!token)
         return -1;
+
     int res = 0;
     switch (token->type)
     {
+    case TOKEN_TYPE_KEYWORD:
+        if (keyword_is_datatype(token->sval)) {
+            parse_variable_function_or_struct_union(history_begin(0));
+            res = 0; // Garante que retornamos 0 se o processamento foi bem sucedido
+        } else {
+            parse_keyword(history_begin(0));
+            res = 0;
+        }
+        break;
     case TOKEN_TYPE_NUMBER:
     case TOKEN_TYPE_IDENTIFIER:
     case TOKEN_TYPE_STRING:
         parse_expressionable(history_begin(0));
+        res = 0;
         break;
     default:
+        res = -1; // Retorna erro para tokens não processados
         break;
     }
-    return 0;
+    return res;
 }
 
 // Para imprimir árvore e seus nós
@@ -455,7 +461,7 @@ void print_node_type(struct node *node)
     switch (node->type)
     {
     case NODE_TYPE_NUMBER:
-        printf("NUMBER (%u)", node->inum);
+        printf("NUMBER (%llu)", node->llnum);
         break;
     case NODE_TYPE_IDENTIFIER:
         printf("IDENTIFIER (%s)", node->sval ? node->sval : "null");
@@ -471,6 +477,15 @@ void print_node_type(struct node *node)
         break;
     case NODE_TYPE_EXPRESSION_PARENTHESES:
         printf("PAREN_EXPR");
+        break;
+    case NODE_TYPE_VARIABLE:
+        printf("VARIABLE (name: %s, type: %s)", 
+               node->var.name ? node->var.name : "null",
+               node->var.type.type_str ? node->var.type.type_str : "null");
+        break;
+    case NODE_TYPE_VARIABLE_LIST:
+        printf("VARIABLE_LIST (count: %d)", 
+               node->var_list.list ? vector_count(node->var_list.list) : 0);
         break;
     default:
         printf("UNKNOWN (type %d)", node->type);
@@ -499,12 +514,36 @@ void print_node_tree(struct node *node, int indent, bool is_last)
     print_node_type(node);
     printf("\n");
 
-    if (node->type == NODE_TYPE_EXPRESSION ||
-        node->type == NODE_TYPE_UNARY ||
-        node->type == NODE_TYPE_EXPRESSION_PARENTHESES)
+    // Imprimir filhos baseado no tipo do nó
+    switch (node->type)
     {
-        print_node_tree(node->exp.left, indent + 1, false);
-        print_node_tree(node->exp.right, indent + 1, true);
+        case NODE_TYPE_EXPRESSION:
+        case NODE_TYPE_UNARY:
+        case NODE_TYPE_EXPRESSION_PARENTHESES:
+            print_node_tree(node->exp.left, indent + 1, false);
+            print_node_tree(node->exp.right, indent + 1, true);
+            break;
+            
+        case NODE_TYPE_VARIABLE:
+            if (node->var.val)
+            {
+                print_node_tree(node->var.val, indent + 1, true);
+            }
+            break;
+            
+        case NODE_TYPE_VARIABLE_LIST:
+            if (node->var_list.list)
+            {
+                for (int i = 0; i < vector_count(node->var_list.list); i++)
+                {
+                    struct node** var_ptr = vector_at(node->var_list.list, i);
+                    if (var_ptr && *var_ptr)
+                    {
+                        print_node_tree(*var_ptr, indent + 1, i == vector_count(node->var_list.list) - 1);
+                    }
+                }
+            }
+            break;
     }
 }
 
@@ -521,23 +560,45 @@ int parse(struct compile_process *process)
     vector_set_peek_pointer(process->token_vec, 0);
 
     // Imprime arvore de nodes
-    struct node *node = node_peek();
     printf("\n\nArvore de nodes:\n");
-    while (parse_next() == 0)
+    
+    // Contador de segurança para evitar loop infinito
+    int max_iterations = 1000; // Número máximo de iterações
+    int iteration_count = 0;
+    
+    // Processa cada token até o final
+    while (iteration_count < max_iterations)
     {
-        node = node_peek();
+        struct token* token = token_peek_next();
+        if (!token) break;
 
+        // Processa o próximo token
+        if (parse_next() != 0) break;
+
+        // Obtém o nó criado
+        struct node* node = node_peek();
         if (!node)
         {
-            printf("Warning: node_peek() returned NULL\n");
-            break;
+            printf("Warning: node_peek() returned NULL (iteração %d)\n", iteration_count);
+            // Incrementa o contador mesmo quando node_peek retorna NULL
+            iteration_count++;
+            continue;
         }
 
+        // Adiciona o nó à árvore
         vector_push(process->node_tree_vec, &node);
 
+        // Imprime a árvore
         print_node_tree(node, 0, true);
         printf("\n\n");
+        
+        iteration_count++;
     }
+
+    if (iteration_count >= max_iterations) {
+        printf("Aviso: Número máximo de iterações atingido. Possível loop infinito detectado.\n");
+    }
+
     return PARSE_ALL_OK;
 }
 
@@ -670,43 +731,15 @@ void parse_datatype(struct datatype* dtype) { // LAB5
     parse_datatype_modifiers(dtype);
 }
 
-void parse_variable_function_or_struct_union(struct history* history) { // LAB5
-    // Parse o datatype
+void parse_variable_function_or_struct_union(struct history* history) {
     struct datatype dtype;
     parse_datatype(&dtype);
-
-    // Pega o próximo token que deve ser o identificador
-    struct token* identifier_token = token_peek_next();
-    if (!identifier_token || identifier_token->type != TOKEN_TYPE_IDENTIFIER) {
-        compiler_error(current_process, "Esperado identificador após tipo\n");
+    struct token* name_token = token_next();
+    if (name_token->type != TOKEN_TYPE_IDENTIFIER) {
+        compiler_error(current_process, "Variavel declarada sem nome!\n");
         return;
     }
-
-    // Cria o node para a variável
-    struct node* node = node_create(&(struct node){
-        .type = NODE_TYPE_VARIABLE,
-        .pos = identifier_token->pos,
-        .sval = identifier_token->sval
-    });
-
-    if (!node) {
-        compiler_error(current_process, "Falha ao criar node para variável\n");
-        return;
-    }
-
-    // Armazena o datatype no node
-    node->any = malloc(sizeof(struct datatype));
-    if (!node->any) {
-        compiler_error(current_process, "Falha ao alocar memória para datatype\n");
-        return;
-    }
-    memcpy(node->any, &dtype, sizeof(struct datatype));
-
-    // Adiciona o node à pilha
-    node_push(node);
-
-    // Avança para o próximo token
-    token_next();
+    parse_variable(&dtype, name_token, history);
 }
 
 void parse_keyword(struct history *history) { // LAB 5
@@ -744,4 +777,128 @@ void parse_keyword(struct history *history) { // LAB 5
 
     // TODO: Implementar outros tipos de keywords (if, while, etc)
     compiler_error(current_process, "Keyword não implementada: %s\n", token->sval);
+}
+
+static bool token_next_is_operator(const char* op) {
+    struct token* token = token_peek_next();
+    return token_is_operator(token, op);
+}
+
+void parse_expressionable_root(struct history* history) {
+    parse_expressionable(history);
+    struct node* result_node = node_pop();
+    node_push(result_node);
+}
+
+void parse_variable(struct datatype* dtype, struct token* name_token, struct history* history) {
+    // Criar lista de variáveis usando a estrutura varlist
+    struct node var_list_node = {
+        .type = NODE_TYPE_VARIABLE_LIST,
+        .var_list.list = vector_create(sizeof(struct node*))
+    };
+    
+    if (!var_list_node.var_list.list) {
+        compiler_error(current_process, "Falha ao criar lista de variáveis\n");
+        return;
+    }
+    
+   
+    
+    // Adicionar a primeira variável
+    struct node* value_node = NULL;
+    if (token_next_is_operator("=")) {
+        // Ignore o "=".
+        token_next();
+        parse_expressionable_root(history);
+        value_node = node_pop();
+    }
+    
+    // Criar node para a primeira variável
+    make_variable_node(dtype, name_token, value_node);
+    struct node* var_node = node_pop();
+    if (!var_node) {
+        compiler_error(current_process, "Falha ao criar node para variável\n");
+        vector_free(var_list_node.var_list.list);
+        return;
+    }
+    vector_push(var_list_node.var_list.list, &var_node);
+   
+    
+    // Verificar se há mais variáveis (separadas por vírgula)
+    while (token_next_is_operator(",")) {
+        // Ignore a vírgula
+        token_next();
+        
+        // Pega o próximo token que deve ser um identificador
+        struct token* next_name_token = token_next();
+        if (next_name_token->type != TOKEN_TYPE_IDENTIFIER) {
+            compiler_error(current_process, "Esperado identificador após vírgula\n");
+            break;
+        }
+        
+        // Verifica se há inicialização
+        value_node = NULL;
+        if (token_next_is_operator("=")) {
+            token_next();
+            parse_expressionable_root(history);
+            value_node = node_pop();
+        }
+        
+        // Criar node para a variável
+        make_variable_node(dtype, next_name_token, value_node);
+        var_node = node_pop();
+        if (!var_node) {
+            compiler_error(current_process, "Falha ao criar node para variável\n");
+            break;
+        }
+        vector_push(var_list_node.var_list.list, &var_node);
+    
+    }
+    
+    // Verificar se há ponto e vírgula no final
+    struct token* semicolon = token_next();
+    if (!token_is_symbol(semicolon, ';')) {
+        compiler_error(current_process, "Esperado ';' após declaração de variáveis\n");
+        vector_free(var_list_node.var_list.list);
+        return;
+    }
+    
+    // Criar o node da lista de variáveis
+    struct node* created_node = node_create(&var_list_node);
+    if (!created_node) {
+        compiler_error(current_process, "Falha ao criar node da lista de variáveis\n");
+        vector_free(var_list_node.var_list.list);
+        return;
+    }
+       
+    // Registrar todas as variáveis no escopo
+    for (int i = 0; i < vector_count(var_list_node.var_list.list); i++) {
+        struct node** var_ptr = vector_at(var_list_node.var_list.list, i);
+        if (!var_ptr || !*var_ptr) continue;
+        
+        // Criar um token temporário com o nome da variável
+        struct token temp_token = {
+            .type = TOKEN_TYPE_IDENTIFIER,
+            .sval = (*var_ptr)->var.name,
+            .pos = (*var_ptr)->pos  // Copiar a posição do node
+        };
+        make_variable_node_and_register(history, dtype, &temp_token, (*var_ptr)->var.val);
+    }
+    
+    // Adicionar o node da lista à pilha
+    node_push(created_node);
+}
+
+void make_variable_node_and_register(struct history* history, struct datatype* dtype, struct token* name_token, struct node* value_node) {
+    make_variable_node(dtype, name_token, value_node);
+    struct node* var_node = node_pop();
+    // 1 - Calcular o escopo offset
+    // 2 - Adicionar a variavel no escopo correto
+    node_push(var_node);
+}
+
+void make_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node) {
+    const char* name_str = NULL;
+    if (name_token) name_str = name_token->sval;
+    node_create(&(struct node){.type = NODE_TYPE_VARIABLE, .var.name = name_str, .var.type = *dtype, .var.val = value_node});
 }
