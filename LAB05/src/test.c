@@ -1,4 +1,4 @@
-int a, b, c, d, e;
-float aa, bb, cc;
+int A[50][50];
+float B[100];
 
-1 + 2 + 1
+ 

@@ -366,6 +366,8 @@ void make_variable_node_and_register(struct history* history, struct datatype* d
 void make_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node);
 void parse_variable_function_or_struct_union(struct history* history);
 void parse_expressionable_root(struct history* history);
+void parse_struct(struct history* history);
+void parse_if(struct history* history);
 
 /* FUNCOES DO ARQUIVO TOKEN.C */
 bool token_is_keyword(struct token *token, const char *value);

@@ -18,5 +18,14 @@ bool discart_token(struct token *token)
 }
 
 bool token_is_operator(struct token* token, const char* val) {
-    return token && token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, val);
+    if (!token) return false;
+    
+    // Caso especial para "]" - aceitar tanto como operador quanto como símbolo
+    if (S_EQ(val, "]")) {
+        return (token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, val)) ||
+               (token->type == TOKEN_TYPE_SYMBOL && token->cval == ']');
+    }
+    
+    // Para outros operadores, manter o comportamento original
+    return token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, val);
 }

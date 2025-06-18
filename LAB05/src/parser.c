@@ -21,7 +21,7 @@ bool token_is_primitive_keyword(struct token* token);
 void parser_get_datatype_tokens(struct token** datatype_token, struct token** datatype_secundary_token);
 int parser_datatype_expected_for_type_string(const char* str);
 int parser_get_random_type_index();
-struct token* parser_build_random_type_name();
+struct token*parser_build_random_type_name();
 int parser_get_pointer_depth();
 bool parser_datatype_is_secondary_allowed_for_type(const char* type);
 void parser_datatype_adjust_size_for_secondary(struct datatype* datatype, struct token* datatype_secondary_token);
@@ -268,8 +268,12 @@ void parse_keyword_for_global() {
     struct node* node = node_pop();
 }
 
-void parse_identifier(struct history* history) { // LAB5
-    assert(token_peek_next()->type == NODE_TYPE_IDENTIFIER);
+void parse_identifier(struct history* history) {
+    struct token* token = token_peek_next();
+    if (!token || token->type != TOKEN_TYPE_IDENTIFIER) {
+        compiler_error(current_process, "Esperado identificador\n");
+        return;
+    }
     parse_single_token_to_node();
 }
 
@@ -386,26 +390,32 @@ bool parser_datatype_is_secondary_allowed_for_type(const char* type) {
 int parse_expressionable_single(struct history *history) {
     struct token *token = token_peek_next();
     if (!token) return -1;
+    
     history->flags |= NODE_FLAG_INSIDE_EXPRESSION;
     int res = -1;
+    
     switch (token->type) {
         case TOKEN_TYPE_NUMBER:
             parse_single_token_to_node();
             res = 0;
             break;
-        case TOKEN_TYPE_IDENTIFIER: // LAB5
-            res = 0;
+        case TOKEN_TYPE_IDENTIFIER:
             parse_identifier(history);
+            res = 0;
             break;
         case TOKEN_TYPE_OPERATOR:
             parse_exp(history);
             res = 0;
             break;
-        case TOKEN_TYPE_KEYWORD: // LAB5
-            parse_keyword(history);
+        case TOKEN_TYPE_KEYWORD:
+            // Para keywords dentro de expressões, apenas avança
+            token_next();
             res = 0;
             break;
         default:
+            // Para outros tipos, apenas avança
+            token_next();
+            res = 0;
             break;
     }
     return res;
@@ -413,8 +423,16 @@ int parse_expressionable_single(struct history *history) {
 
 void parse_expressionable(struct history *history)
 {
-    while (parse_expressionable_single(history) == 0)
+    int max_iterations = 100; // Limite para evitar loop infinito
+    int iteration_count = 0;
+    
+    while (iteration_count < max_iterations && parse_expressionable_single(history) == 0)
     {
+        iteration_count++;
+    }
+    
+    if (iteration_count >= max_iterations) {
+        printf("Aviso: Número máximo de iterações atingido em parse_expressionable\n");
     }
 }
 
@@ -428,11 +446,42 @@ int parse_next()
     switch (token->type)
     {
     case TOKEN_TYPE_KEYWORD:
-        if (keyword_is_datatype(token->sval)) {
+        if (S_EQ(token->sval, "struct")) {
+            token_next(); // Consome "struct"
+            parse_struct(history_begin(0));
+            res = 0;
+        } else if (S_EQ(token->sval, "if")) {
+            token_next(); // Consome "if"
+            parse_if(history_begin(0));
+            res = 0;
+        } else if (S_EQ(token->sval, "return")) {
+            token_next(); // Consome "return"
+            // Processa o valor de retorno
+            parse_expressionable_root(history_begin(0));
+            struct node* return_value = node_pop();
+            if (return_value) {
+                struct node return_node = {
+                    .type = NODE_TYPE_STATEMENT_RETURN,
+                    .pos = token->pos
+                };
+                struct node* created_return = node_create(&return_node);
+                if (created_return) {
+                    node_push(created_return);
+                    printf("Return statement processado\n");
+                }
+            }
+            // Verifica ponto e vírgula
+            struct token* semicolon = token_next();
+            if (!token_is_symbol(semicolon, ';')) {
+                compiler_error(current_process, "Esperado ';' após return\n");
+            }
+            res = 0;
+        } else if (keyword_is_datatype(token->sval)) {
             parse_variable_function_or_struct_union(history_begin(0));
-            res = 0; // Garante que retornamos 0 se o processamento foi bem sucedido
+            res = 0;
         } else {
-            parse_keyword(history_begin(0));
+            // Para outros keywords, apenas avança
+            token_next();
             res = 0;
         }
         break;
@@ -442,8 +491,20 @@ int parse_next()
         parse_expressionable(history_begin(0));
         res = 0;
         break;
+    case TOKEN_TYPE_SYMBOL:
+        // Ignora símbolos como chaves, parênteses, etc.
+        token_next();
+        res = 0;
+        break;
+    case TOKEN_TYPE_OPERATOR:
+        // Processa operadores como parte de expressões
+        parse_expressionable(history_begin(0));
+        res = 0;
+        break;
     default:
-        res = -1; // Retorna erro para tokens não processados
+        // Avança o token se não conseguir processar
+        token_next();
+        res = 0;
         break;
     }
     return res;
@@ -479,13 +540,44 @@ void print_node_type(struct node *node)
         printf("PAREN_EXPR");
         break;
     case NODE_TYPE_VARIABLE:
-        printf("VARIABLE (name: %s, type: %s)", 
-               node->var.name ? node->var.name : "null",
-               node->var.type.type_str ? node->var.type.type_str : "null");
+        {
+            printf("VARIABLE (name: %s, type: %s", 
+                   node->var.name ? node->var.name : "null",
+                   node->var.type.type_str ? node->var.type.type_str : "null");
+            
+            // Mostrar informações de array se aplicável
+            if (node->var.type.flags & DATATYPE_FLAG_IS_ARRAY) {
+                printf(", ARRAY[%zu", node->var.type.size);
+                
+                // Mostrar dimensões adicionais se houver
+                struct datatype* current = node->var.type.datatype_secondary;
+                while (current && current->size > 0) {
+                    printf("][%zu", current->size);
+                    current = current->datatype_secondary;
+                }
+                printf("]");
+            }
+            
+            // Mostrar valor inicial se houver
+            if (node->var.val) {
+                printf(", initialized");
+            }
+            
+            printf(")");
+        }
         break;
     case NODE_TYPE_VARIABLE_LIST:
         printf("VARIABLE_LIST (count: %d)", 
                node->var_list.list ? vector_count(node->var_list.list) : 0);
+        break;
+    case NODE_TYPE_STRUCT:
+        printf("STRUCT (name: %s)", node->sval ? node->sval : "null");
+        break;
+    case NODE_TYPE_STATEMENT_IF:
+        printf("IF_STATEMENT");
+        break;
+    case NODE_TYPE_STATEMENT_RETURN:
+        printf("RETURN_STATEMENT");
         break;
     default:
         printf("UNKNOWN (type %d)", node->type);
@@ -543,6 +635,14 @@ void print_node_tree(struct node *node, int indent, bool is_last)
                     }
                 }
             }
+            break;
+            
+        case NODE_TYPE_STRUCT:
+            // Aqui você pode adicionar a impressão dos membros da struct se necessário
+            break;
+            
+        case NODE_TYPE_STATEMENT_IF:
+            // Aqui você pode adicionar a impressão da condição e do corpo do if se necessário
             break;
     }
 }
@@ -787,7 +887,9 @@ static bool token_next_is_operator(const char* op) {
 void parse_expressionable_root(struct history* history) {
     parse_expressionable(history);
     struct node* result_node = node_pop();
-    node_push(result_node);
+    if (result_node) {
+        node_push(result_node);
+    }
 }
 
 void parse_variable(struct datatype* dtype, struct token* name_token, struct history* history) {
@@ -802,12 +904,28 @@ void parse_variable(struct datatype* dtype, struct token* name_token, struct his
         return;
     }
     
-   
-    
     // Adicionar a primeira variável
     struct node* value_node = NULL;
+    int array_dims[8] = {0}; // Suporta até 8 dimensões
+    int array_dim_count = 0;
+    
+    // Processa colchetes para arrays
+    while (token_next_is_operator("[")) {
+        token_next(); // Consome o '['
+        struct token* size_token = token_next();
+        if (size_token->type != TOKEN_TYPE_NUMBER) {
+            compiler_error(current_process, "Esperado número como tamanho do array\n");
+            break;
+        }
+        array_dims[array_dim_count++] = size_token->inum;
+        struct token* close_bracket = token_next();
+        if (!token_is_operator(close_bracket, "]")) {
+            compiler_error(current_process, "Esperado ']' após tamanho do array\n");
+            break;
+        }
+    }
+    
     if (token_next_is_operator("=")) {
-        // Ignore o "=".
         token_next();
         parse_expressionable_root(history);
         value_node = node_pop();
@@ -821,41 +939,78 @@ void parse_variable(struct datatype* dtype, struct token* name_token, struct his
         vector_free(var_list_node.var_list.list);
         return;
     }
+    // Armazenar as dimensões do array no node
+    if (array_dim_count > 0) {
+        var_node->var.type.flags |= DATATYPE_FLAG_IS_ARRAY;
+        var_node->var.type.pointer_depth = array_dim_count;
+        for (int i = 0; i < array_dim_count; i++) {
+            // Usar o campo size para a primeira dimensão, e o campo datatype_secondary para as demais
+            if (i == 0) {
+                var_node->var.type.size = array_dims[0];
+            } else {
+                // Para múltiplas dimensões, pode-se criar uma cadeia de datatypes secundários
+                if (!var_node->var.type.datatype_secondary) {
+                    var_node->var.type.datatype_secondary = calloc(1, sizeof(struct datatype));
+                }
+                var_node->var.type.datatype_secondary->size = array_dims[i];
+            }
+        }
+    }
     vector_push(var_list_node.var_list.list, &var_node);
-   
     
     // Verificar se há mais variáveis (separadas por vírgula)
     while (token_next_is_operator(",")) {
-        // Ignore a vírgula
         token_next();
-        
-        // Pega o próximo token que deve ser um identificador
         struct token* next_name_token = token_next();
         if (next_name_token->type != TOKEN_TYPE_IDENTIFIER) {
             compiler_error(current_process, "Esperado identificador após vírgula\n");
             break;
         }
-        
-        // Verifica se há inicialização
+        // Processa colchetes para arrays
+        array_dim_count = 0;
+        while (token_next_is_operator("[")) {
+            token_next();
+            struct token* size_token = token_next();
+            if (size_token->type != TOKEN_TYPE_NUMBER) {
+                compiler_error(current_process, "Esperado número como tamanho do array\n");
+                break;
+            }
+            array_dims[array_dim_count++] = size_token->inum;
+            struct token* close_bracket = token_next();
+            if (!token_is_operator(close_bracket, "]")) {
+                compiler_error(current_process, "Esperado ']' após tamanho do array\n");
+                break;
+            }
+        }
         value_node = NULL;
         if (token_next_is_operator("=")) {
             token_next();
             parse_expressionable_root(history);
             value_node = node_pop();
         }
-        
-        // Criar node para a variável
         make_variable_node(dtype, next_name_token, value_node);
         var_node = node_pop();
         if (!var_node) {
             compiler_error(current_process, "Falha ao criar node para variável\n");
             break;
         }
+        if (array_dim_count > 0) {
+            var_node->var.type.flags |= DATATYPE_FLAG_IS_ARRAY;
+            var_node->var.type.pointer_depth = array_dim_count;
+            for (int i = 0; i < array_dim_count; i++) {
+                if (i == 0) {
+                    var_node->var.type.size = array_dims[0];
+                } else {
+                    if (!var_node->var.type.datatype_secondary) {
+                        var_node->var.type.datatype_secondary = calloc(1, sizeof(struct datatype));
+                    }
+                    var_node->var.type.datatype_secondary->size = array_dims[i];
+                }
+            }
+        }
         vector_push(var_list_node.var_list.list, &var_node);
-    
     }
     
-    // Verificar se há ponto e vírgula no final
     struct token* semicolon = token_next();
     if (!token_is_symbol(semicolon, ';')) {
         compiler_error(current_process, "Esperado ';' após declaração de variáveis\n");
@@ -863,29 +1018,22 @@ void parse_variable(struct datatype* dtype, struct token* name_token, struct his
         return;
     }
     
-    // Criar o node da lista de variáveis
     struct node* created_node = node_create(&var_list_node);
     if (!created_node) {
         compiler_error(current_process, "Falha ao criar node da lista de variáveis\n");
         vector_free(var_list_node.var_list.list);
         return;
     }
-       
-    // Registrar todas as variáveis no escopo
     for (int i = 0; i < vector_count(var_list_node.var_list.list); i++) {
         struct node** var_ptr = vector_at(var_list_node.var_list.list, i);
         if (!var_ptr || !*var_ptr) continue;
-        
-        // Criar um token temporário com o nome da variável
         struct token temp_token = {
             .type = TOKEN_TYPE_IDENTIFIER,
             .sval = (*var_ptr)->var.name,
-            .pos = (*var_ptr)->pos  // Copiar a posição do node
+            .pos = (*var_ptr)->pos
         };
         make_variable_node_and_register(history, dtype, &temp_token, (*var_ptr)->var.val);
     }
-    
-    // Adicionar o node da lista à pilha
     node_push(created_node);
 }
 
@@ -901,4 +1049,222 @@ void make_variable_node(struct datatype* dtype, struct token* name_token, struct
     const char* name_str = NULL;
     if (name_token) name_str = name_token->sval;
     node_create(&(struct node){.type = NODE_TYPE_VARIABLE, .var.name = name_str, .var.type = *dtype, .var.val = value_node});
+}
+
+// Função para processar structs
+void parse_struct(struct history* history) {
+    printf("\nProcessando struct:\n");
+    
+    // Pega o nome da struct
+    struct token* struct_name = token_next();
+    if (struct_name->type != TOKEN_TYPE_IDENTIFIER) {
+        compiler_error(current_process, "Esperado nome da struct\n");
+        return;
+    }
+    printf("Nome da struct: %s\n", struct_name->sval);
+    
+    // Verifica se há chave de abertura
+    struct token* open_brace = token_next();
+    if (!token_is_symbol(open_brace, '{')) {
+        compiler_error(current_process, "Esperado '{' após nome da struct\n");
+        return;
+    }
+    
+    // Cria lista de membros da struct
+    struct vector* members = vector_create(sizeof(struct node*));
+    if (!members) {
+        compiler_error(current_process, "Falha ao criar lista de membros da struct\n");
+        return;
+    }
+    
+    // Processa os membros da struct
+    while (true) {
+        struct token* next_token = token_peek_next();
+        if (!next_token) break;
+        
+        // Verifica se é o fechamento da struct
+        if (token_is_symbol(next_token, '}')) {
+            token_next(); // Consome o '}'
+            break;
+        }
+        
+        // Processa declaração de membro
+        struct datatype member_type;
+        parse_datatype(&member_type);
+        
+        struct token* member_name = token_next();
+        if (member_name->type != TOKEN_TYPE_IDENTIFIER) {
+            compiler_error(current_process, "Esperado nome do membro da struct\n");
+            break;
+        }
+        
+        // Cria node para o membro
+        make_variable_node(&member_type, member_name, NULL);
+        struct node* member_node = node_pop();
+        if (member_node) {
+            vector_push(members, &member_node);
+            printf("Membro adicionado: %s %s\n", member_type.type_str, member_name->sval);
+        }
+        
+        // Verifica se há mais membros na mesma linha
+        while (token_next_is_operator(",")) {
+            token_next(); // Consome a vírgula
+            
+            struct token* next_member = token_next();
+            if (next_member->type != TOKEN_TYPE_IDENTIFIER) {
+                compiler_error(current_process, "Esperado nome do membro após vírgula\n");
+                break;
+            }
+            
+            make_variable_node(&member_type, next_member, NULL);
+            member_node = node_pop();
+            if (member_node) {
+                vector_push(members, &member_node);
+                printf("Membro adicionado: %s %s\n", member_type.type_str, next_member->sval);
+            }
+        }
+        
+        // Verifica ponto e vírgula
+        struct token* semicolon = token_next();
+        if (!token_is_symbol(semicolon, ';')) {
+            compiler_error(current_process, "Esperado ';' após declaração de membro\n");
+            break;
+        }
+    }
+    
+    // Verifica ponto e vírgula após o fechamento da struct
+    struct token* struct_semicolon = token_next();
+    if (!token_is_symbol(struct_semicolon, ';')) {
+        compiler_error(current_process, "Esperado ';' após fechamento da struct\n");
+        vector_free(members);
+        return;
+    }
+    
+    // Cria o node da struct
+    struct node struct_node = {
+        .type = NODE_TYPE_STRUCT,
+        .sval = struct_name->sval,
+        .pos = struct_name->pos
+    };
+    
+    struct node* created_struct = node_create(&struct_node);
+    if (!created_struct) {
+        compiler_error(current_process, "Falha ao criar node da struct\n");
+        vector_free(members);
+        return;
+    }
+    
+    printf("Struct criada com %d membros\n", vector_count(members));
+    node_push(created_struct);
+}
+
+// Função auxiliar para verificar se um token é parênteses
+static bool token_is_parenthesis(struct token* token, char paren) {
+    if (!token) return false;
+    
+    if (token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, &paren)) {
+        return true;
+    }
+    
+    if (token->type == TOKEN_TYPE_SYMBOL && token->cval == paren) {
+        return true;
+    }
+    
+    return false;
+}
+
+// Função para processar ifs
+void parse_if(struct history* history) {
+    printf("\nProcessando if:\n");
+    
+    // Verifica parênteses de abertura
+    struct token* next_token = token_peek_next();
+    if (!next_token) {
+        compiler_error(current_process, "Token inesperado após if\n");
+        return;
+    }
+    
+    // Verifica se o próximo token é '('
+    if (!token_is_parenthesis(next_token, '(')) {
+        // Se não encontrou '(', avança para o próximo token
+        token_next();
+        next_token = token_peek_next();
+        if (!next_token || !token_is_parenthesis(next_token, '(')) {
+            compiler_error(current_process, "Esperado '(' após if\n");
+            return;
+        }
+    }
+    
+    // Consome o '('
+    token_next();
+    
+    // Processa a condição
+    parse_expressionable_root(history);
+    struct node* condition = node_pop();
+    if (!condition) {
+        printf("Aviso: Condição do if não foi processada corretamente\n");
+        // Continua mesmo sem condição válida
+    } else {
+        printf("Condição do if processada\n");
+    }
+    
+    // Verifica parênteses de fechamento
+    struct token* close_paren = token_next();
+    if (!close_paren || !token_is_parenthesis(close_paren, ')')) {
+        compiler_error(current_process, "Esperado ')' após condição do if\n");
+        return;
+    }
+    
+    // Verifica chave de abertura
+    struct token* open_brace = token_next();
+    if (!open_brace || !token_is_symbol(open_brace, '{')) {
+        compiler_error(current_process, "Esperado '{' após condição do if\n");
+        return;
+    }
+    
+    // Processa o corpo do if
+    struct vector* body_statements = vector_create(sizeof(struct node*));
+    if (!body_statements) {
+        compiler_error(current_process, "Falha ao criar lista de statements do if\n");
+        return;
+    }
+    
+    while (true) {
+        struct token* next_token = token_peek_next();
+        if (!next_token) break;
+        
+        // Verifica se é o fechamento do if
+        if (token_is_symbol(next_token, '}')) {
+            token_next(); // Consome o '}'
+            break;
+        }
+        
+        // Processa statement
+        if (parse_next() == 0) {
+            struct node* statement = node_pop();
+            if (statement) {
+                vector_push(body_statements, &statement);
+                printf("Statement adicionado ao if\n");
+            }
+        } else {
+            // Se não conseguiu processar, avança o token
+            token_next();
+        }
+    }
+    
+    // Cria o node do if
+    struct node if_node = {
+        .type = NODE_TYPE_STATEMENT_IF,
+        .pos = next_token ? next_token->pos : (struct pos){0, 0, NULL}
+    };
+    
+    struct node* created_if = node_create(&if_node);
+    if (!created_if) {
+        compiler_error(current_process, "Falha ao criar node do if\n");
+        vector_free(body_statements);
+        return;
+    }
+    
+    printf("If criado com %d statements\n", vector_count(body_statements));
+    node_push(created_if);
 }
