@@ -234,6 +234,7 @@ enum {
     NODE_TYPE_STRING,
     NODE_TYPE_VARIABLE,
     NODE_TYPE_VARIABLE_LIST,
+    NODE_TYPE_VARIAVEL_INVERTIDA,
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
@@ -302,6 +303,11 @@ struct node
             const char* name;
             struct node* val;
         } var;
+        struct reverse_var {
+            struct datatype type;
+            const char* name;
+            struct node* val;
+        } reverse_var;
         struct varlist {
             struct vector* list;
         } var_list;
@@ -368,6 +374,8 @@ void parse_variable_function_or_struct_union(struct history* history);
 void parse_expressionable_root(struct history* history);
 void parse_struct(struct history* history);
 void parse_if(struct history* history);
+void parse_reverse_variable_declaration(struct history* history);
+void make_reverse_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node);
 
 /* FUNCOES DO ARQUIVO TOKEN.C */
 bool token_is_keyword(struct token *token, const char *value);
