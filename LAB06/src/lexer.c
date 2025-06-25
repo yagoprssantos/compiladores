@@ -318,7 +318,9 @@ bool is_keyword(const char *str)
            S_EQ(str, "typedef") ||
            S_EQ(str, "const") ||
            S_EQ(str, "extern") ||
-           S_EQ(str, "retrict");
+           S_EQ(str, "retrict") ||
+           S_EQ(str, "igual") ||
+           S_EQ(str, "bool");
 }
 
 static struct token *token_make_operator_or_string()

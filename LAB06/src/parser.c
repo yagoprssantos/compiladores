@@ -33,6 +33,7 @@ void parse_datatype_modifiers(struct datatype* dtype);
 void parse_datatype(struct datatype* dtype);
 void parse_variable_function_or_struct_union(struct history* history);
 void parse_keyword(struct history *history);
+void parse_variable_igual_syntax(struct history* history, struct token* name_token);
 
 struct history *history_begin(int flags)
 {
@@ -269,38 +270,12 @@ void parse_keyword_for_global() {
 }
 
 void parse_identifier(struct history* history) {
-    struct token* ident_token = token_peek_next(); // O identificador
-    
-    
-    token_next(); // Consome o identificador
-    struct token* next_token = token_peek_next();
-   
-    
-    if (next_token && next_token->type == TOKEN_TYPE_OPERATOR && token_is_operator(next_token, "=")) {
-        token_next(); // Consome o '='
-        struct token* after_equal = token_peek_next();
-        if (after_equal && after_equal->type == TOKEN_TYPE_KEYWORD && keyword_is_datatype(after_equal->sval)) {
-            struct datatype dtype;
-            parse_datatype(&dtype);
-            struct token* semicolon = token_next();
-            if (!token_is_symbol(semicolon, ';')) {
-                compiler_error(current_process, "Esperado ';' após declaração de variável\n");
-            } else {
-                make_reverse_variable_node(&dtype, ident_token, NULL);
-                struct node* var_node = node_pop();
-                if (var_node) {
-                    node_push(var_node);
-                    if (current_process && current_process->node_tree_vec) {
-                        vector_push(current_process->node_tree_vec, &var_node);
-                    }
-                }
-            }
-        } else {
-            parse_expressionable(history_begin(0));
-        }
-    } else {
-        parse_expressionable(history_begin(0));
+    struct token* token = token_peek_next();
+    if (!token || token->type != TOKEN_TYPE_IDENTIFIER) {
+        compiler_error(current_process, "Esperado identificador\n");
+        return;
     }
+    parse_single_token_to_node();
 }
 
 static bool keyword_is_datatype(const char* val) { // LAB5
@@ -312,7 +287,8 @@ static bool keyword_is_datatype(const char* val) { // LAB5
            S_EQ(val, "double") ||
            S_EQ(val, "long") ||
            S_EQ(val, "struct") ||
-           S_EQ(val, "union");
+           S_EQ(val, "union") ||
+           S_EQ(val, "bool");
 }
 
 static bool is_keyword_variable_modifier(const char* val) { // LAB5
@@ -340,6 +316,8 @@ bool token_is_primitive_keyword(struct token* token) { // LAB5
     } else if (S_EQ(token->sval, "float")) {
         return true;
     } else if (S_EQ(token->sval, "double")) {
+        return true;
+    } else if (S_EQ(token->sval, "bool")) {
         return true;
     }
     return false;
@@ -410,7 +388,7 @@ int parser_get_pointer_depth() {// LAB5
 }
 
 bool parser_datatype_is_secondary_allowed_for_type(const char* type) {
-    return S_EQ(type, "long") || S_EQ(type, "short") || S_EQ(type, "double") || S_EQ(type, "float");
+    return S_EQ(type, "long") || S_EQ(type, "short") || S_EQ(type, "double") || S_EQ(type, "float") || S_EQ(type, "bool");
 }
 
 int parse_expressionable_single(struct history *history) {
@@ -517,42 +495,27 @@ int parse_next()
         res = 0;
         break;
     case TOKEN_TYPE_IDENTIFIER:
-        // Verificar se é uma declaração invertida (variável = tipo)
+        // Verificar se o próximo token é "igual" para usar a nova sintaxe
         {
-            struct token* ident_token = token_peek_next(); // O identificador
+            // Consumir o token atual (identificador)
+            struct token* current_token = token_next();
+            printf("DEBUG: Token atual é identificador: %s\n", current_token->sval);
             
-            token_next(); // Consome o identificador
+            // Verificar o próximo token
             struct token* next_token = token_peek_next();
+            printf("DEBUG: Próximo token: %s\n", next_token ? next_token->sval : "NULL");
             
-            if (next_token && next_token->type == TOKEN_TYPE_OPERATOR && token_is_operator(next_token, "=")) {
-                token_next(); // Consome o '='
-                struct token* after_equal = token_peek_next();
-                if (after_equal && after_equal->type == TOKEN_TYPE_KEYWORD && keyword_is_datatype(after_equal->sval)) {
-                    struct datatype dtype;
-                    parse_datatype(&dtype);
-                    struct token* semicolon = token_next();
-                    if (!token_is_symbol(semicolon, ';')) {
-                        compiler_error(current_process, "Esperado ';' após declaração de variável\n");
-                    } else {
-                        make_reverse_variable_node(&dtype, ident_token, NULL);
-                        struct node* var_node = node_pop();
-                        if (var_node) {
-                            node_push(var_node);
-                            if (current_process && current_process->node_tree_vec) {
-                                vector_push(current_process->node_tree_vec, &var_node);
-                            }
-                           
-                        }
-                    }
-                } else {
-                    parse_expressionable(history_begin(0));
-                }
-                res = 0;
+            if (next_token && token_is_keyword(next_token, "igual")) {
+                printf("DEBUG: Detectada sintaxe 'igual', chamando parse_variable_igual_syntax\n");
+                parse_variable_igual_syntax(history_begin(0), current_token);
             } else {
+                printf("DEBUG: Sintaxe normal, processando como expressão\n");
+                // Voltar o token atual para a pilha para que parse_expressionable possa processá-lo
+                vector_push(current_process->token_vec, &current_token);
                 parse_expressionable(history_begin(0));
-                res = 0;
             }
         }
+        res = 0;
         break;
     case TOKEN_TYPE_SYMBOL:
         // Ignora símbolos como chaves, parênteses, etc.
@@ -633,33 +596,6 @@ void print_node_type(struct node *node)
         printf("VARIABLE_LIST (count: %d)", 
                node->var_list.list ? vector_count(node->var_list.list) : 0);
         break;
-    case NODE_TYPE_VARIAVEL_INVERTIDA:
-        {
-            printf("VARIAVEL_INVERTIDA (name: %s, type: %s", 
-                   node->reverse_var.name ? node->reverse_var.name : "null",
-                   node->reverse_var.type.type_str ? node->reverse_var.type.type_str : "null");
-            
-            // Mostrar informações de array se aplicável
-            if (node->reverse_var.type.flags & DATATYPE_FLAG_IS_ARRAY) {
-                printf(", ARRAY[%zu", node->reverse_var.type.size);
-                
-                // Mostrar dimensões adicionais se houver
-                struct datatype* current = node->reverse_var.type.datatype_secondary;
-                while (current && current->size > 0) {
-                    printf("][%zu", current->size);
-                    current = current->datatype_secondary;
-                }
-                printf("]");
-            }
-            
-            // Mostrar valor inicial se houver
-            if (node->reverse_var.val) {
-                printf(", initialized");
-            }
-            
-            printf(")");
-        }
-        break;
     case NODE_TYPE_STRUCT:
         printf("STRUCT (name: %s)", node->sval ? node->sval : "null");
         break;
@@ -713,13 +649,6 @@ void print_node_tree(struct node *node, int indent, bool is_last)
             }
             break;
             
-        case NODE_TYPE_VARIAVEL_INVERTIDA:
-            if (node->reverse_var.val)
-            {
-                print_node_tree(node->reverse_var.val, indent + 1, true);
-            }
-            break;
-            
         case NODE_TYPE_VARIABLE_LIST:
             if (node->var_list.list)
             {
@@ -751,12 +680,11 @@ int parse(struct compile_process *process)
     {
         return PARSE_GENERAL_ERROR;
     }
-    
     current_process = process;
     parser_last_token = NULL;
     node_set_vector(process->node_vec, process->node_tree_vec);
     vector_set_peek_pointer(process->token_vec, 0);
-        
+
     // Imprime arvore de nodes
     printf("\n\nArvore de nodes:\n");
     
@@ -796,7 +724,7 @@ int parse(struct compile_process *process)
     if (iteration_count >= max_iterations) {
         printf("Aviso: Número máximo de iterações atingido. Possível loop infinito detectado.\n");
     }
-    
+
     return PARSE_ALL_OK;
 }
 
@@ -938,6 +866,73 @@ void parse_variable_function_or_struct_union(struct history* history) {
         return;
     }
     parse_variable(&dtype, name_token, history);
+}
+
+// Nova função para processar declarações usando a sintaxe "igual"
+void parse_variable_igual_syntax(struct history* history, struct token* name_token) {
+    printf("DEBUG: Iniciando parse_variable_igual_syntax\n");
+    
+    // Verificar se o token do nome é válido
+    if (name_token->type != TOKEN_TYPE_IDENTIFIER) {
+        compiler_error(current_process, "Esperado nome da variável antes de 'igual'\n");
+        return;
+    }
+    printf("DEBUG: Nome da variável: %s\n", name_token->sval);
+    
+    // Segundo token deve ser "igual"
+    struct token* igual_token = token_next();
+    if (!token_is_keyword(igual_token, "igual")) {
+        compiler_error(current_process, "Esperado 'igual' após nome da variável\n");
+        return;
+    }
+    printf("DEBUG: Token 'igual' encontrado\n");
+    
+    // Terceiro token deve ser o tipo de dados
+    struct token* type_token = token_next();
+    if (!keyword_is_datatype(type_token->sval)) {
+        compiler_error(current_process, "Esperado tipo de dados após 'igual'\n");
+        return;
+    }
+    printf("DEBUG: Tipo de dados: %s\n", type_token->sval);
+    
+    // Criar o datatype baseado no tipo especificado
+    struct datatype dtype;
+    memset(&dtype, 0, sizeof(struct datatype));
+    
+    if (S_EQ(type_token->sval, "int")) {
+        dtype.type = DATATYPE_INTEGER;
+        dtype.type_str = "int";
+        dtype.size = sizeof(int);
+    } else if (S_EQ(type_token->sval, "float")) {
+        dtype.type = DATATYPE_FLOAT;
+        dtype.type_str = "float";
+        dtype.size = sizeof(float);
+    } else if (S_EQ(type_token->sval, "double")) {
+        dtype.type = DATATYPE_DOUBLE;
+        dtype.type_str = "double";
+        dtype.size = sizeof(double);
+    } else if (S_EQ(type_token->sval, "char")) {
+        dtype.type = DATATYPE_CHAR;
+        dtype.type_str = "char";
+        dtype.size = sizeof(char);
+    } else if (S_EQ(type_token->sval, "bool")) {
+        dtype.type = DATATYPE_INTEGER; // bool é tratado como int
+        dtype.type_str = "bool";
+        dtype.size = sizeof(int);
+    } else if (S_EQ(type_token->sval, "void")) {
+        dtype.type = DATATYPE_VOID;
+        dtype.type_str = "void";
+        dtype.size = 0;
+    } else {
+        compiler_error(current_process, "Tipo de dados não suportado: %s\n", type_token->sval);
+        return;
+    }
+    
+    printf("DEBUG: Datatype criado - tipo: %s, tamanho: %zu\n", dtype.type_str, dtype.size);
+    
+    // Processar a variável normalmente
+    parse_variable(&dtype, name_token, history);
+    printf("DEBUG: parse_variable concluído\n");
 }
 
 void parse_keyword(struct history *history) { // LAB 5
@@ -1147,65 +1142,6 @@ void make_variable_node(struct datatype* dtype, struct token* name_token, struct
     const char* name_str = NULL;
     if (name_token) name_str = name_token->sval;
     node_create(&(struct node){.type = NODE_TYPE_VARIABLE, .var.name = name_str, .var.type = *dtype, .var.val = value_node});
-}
-
-void make_reverse_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node) {
-    const char* name_str = NULL;
-    if (name_token) name_str = name_token->sval;
-    node_create(&(struct node){.type = NODE_TYPE_VARIAVEL_INVERTIDA, .reverse_var.name = name_str, .reverse_var.type = *dtype, .reverse_var.val = value_node});
-}
-
-void parse_reverse_variable_declaration(struct history* history) {
-    printf("\n=== PROCESSANDO DECLARAÇÃO INVERTIDA ===\n");
-    
-    // Primeiro token deve ser um identificador (nome da variável)
-    struct token* name_token = token_next();
-    if (name_token->type != TOKEN_TYPE_IDENTIFIER) {
-        compiler_error(current_process, "Esperado identificador para nome da variável\n");
-        return;
-    }
-    printf("✓ Nome da variável: %s\n", name_token->sval);
-    
-    // Verificar se é o formato "A = int;"
-    struct token* next_token = token_peek_next();
-    if (!next_token) {
-        compiler_error(current_process, "Token inesperado após nome da variável\n");
-        return;
-    }
-    
-    if (token_is_operator(next_token, "=")) {
-        // Formato: A = int;
-        printf("✓ Formato detectado: A = int;\n");
-        token_next(); // Consome o '='
-        
-        // Parse do tipo de dados
-        struct datatype dtype;
-        parse_datatype(&dtype);
-      
-        
-        // Verificar ponto e vírgula
-        struct token* semicolon = token_next();
-        if (!token_is_symbol(semicolon, ';')) {
-            compiler_error(current_process, "Esperado ';' após declaração de variável\n");
-            return;
-        }
-        printf("✓ Ponto e vírgula encontrado\n");
-        
-        // Criar o nó da variável
-        make_reverse_variable_node(&dtype, name_token, NULL);
-        struct node* var_node = node_pop();
-        if (var_node) {
-            node_push(var_node);
-            // Adiciona explicitamente à árvore principal
-            if (current_process && current_process->node_tree_vec) {
-                vector_push(current_process->node_tree_vec, &var_node);
-            }
-        }
-        
-    } else {
-        compiler_error(current_process, "Formato de declaração invertida não reconhecido\n");
-        return;
-    }
 }
 
 // Função para processar structs
