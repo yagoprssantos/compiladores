@@ -34,6 +34,14 @@ void parse_datatype(struct datatype* dtype);
 void parse_variable_function_or_struct_union(struct history* history);
 void parse_keyword(struct history *history);
 void parse_variable_igual_syntax(struct history* history, struct token* name_token);
+void parse_struct(struct history* history);
+void parse_struct_tradicional(struct history* history, struct token* struct_name);
+void parse_struct_nova_sintaxe(struct history* history, struct token* struct_name);
+void parse_if(struct history* history);
+
+void make_variable_node_and_register(struct history* history, struct datatype* dtype, struct token* name_token, struct node* value_node);
+void make_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node);
+void make_variable_node_simple(struct datatype* dtype, struct token* name_token, struct node* value_node);
 
 struct history *history_begin(int flags)
 {
@@ -1138,6 +1146,21 @@ void make_variable_node_and_register(struct history* history, struct datatype* d
     node_push(var_node);
 }
 
+// Versão simplificada de make_variable_node que não chama parse_datatype
+void make_variable_node_simple(struct datatype* dtype, struct token* name_token, struct node* value_node) {
+    if (!name_token || !name_token->sval) {
+        compiler_error(current_process, "Token de nome inválido em make_variable_node_simple\n");
+        return;
+    }
+    char* name_str = malloc(strlen(name_token->sval) + 1);
+    if (!name_str) {
+        compiler_error(current_process, "Falha ao alocar memória para nome da variável\n");
+        return;
+    }
+    strcpy(name_str, name_token->sval);
+    node_create(&(struct node){.type = NODE_TYPE_VARIABLE, .var.name = name_str, .var.type = *dtype, .var.val = value_node});
+}
+
 void make_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node) {
     const char* name_str = NULL;
     if (name_token) name_str = name_token->sval;
@@ -1146,42 +1169,57 @@ void make_variable_node(struct datatype* dtype, struct token* name_token, struct
 
 // Função para processar structs
 void parse_struct(struct history* history) {
-    printf("\nProcessando struct:\n");
-    
-    // Pega o nome da struct
+    printf("Processando struct:\n");
     struct token* struct_name = token_next();
     if (struct_name->type != TOKEN_TYPE_IDENTIFIER) {
-        compiler_error(current_process, "Esperado nome da struct\n");
+        compiler_error(current_process, "Nome da struct esperado\n");
         return;
     }
     printf("Nome da struct: %s\n", struct_name->sval);
     
-    // Verifica se há chave de abertura
+    // Verificar se é a nova sintaxe ou a sintaxe tradicional
+    struct token* next_token = token_peek_next();
+    if (next_token && token_is_operator(next_token, "/")) {
+        // Nova sintaxe: struct ABC /int A\ /int B\ /int C\;
+        parse_struct_nova_sintaxe(history, struct_name);
+    } else {
+        // Sintaxe tradicional: struct ABC { ... };
+        parse_struct_tradicional(history, struct_name);
+    }
+}
+
+// Nova função para processar structs com a sintaxe tradicional
+void parse_struct_tradicional(struct history* history, struct token* struct_name) {
     struct token* open_brace = token_next();
     if (!token_is_symbol(open_brace, '{')) {
         compiler_error(current_process, "Esperado '{' após nome da struct\n");
         return;
     }
     
-    // Cria lista de membros da struct
     struct vector* members = vector_create(sizeof(struct node*));
     if (!members) {
         compiler_error(current_process, "Falha ao criar lista de membros da struct\n");
         return;
     }
     
-    // Processa os membros da struct
-    while (true) {
+    int member_count = 0;
+    while (1) {
         struct token* next_token = token_peek_next();
-        if (!next_token) break;
+        if (!next_token) {
+            compiler_error(current_process, "Struct não foi fechada corretamente\n");
+            break;
+        }
         
-        // Verifica se é o fechamento da struct
         if (token_is_symbol(next_token, '}')) {
             token_next(); // Consome o '}'
             break;
         }
         
-        // Processa declaração de membro
+        if (!keyword_is_datatype(next_token->sval)) {
+            compiler_error(current_process, "Esperado tipo de dados para membro da struct\n");
+            break;
+        }
+        
         struct datatype member_type;
         parse_datatype(&member_type);
         
@@ -1191,49 +1229,35 @@ void parse_struct(struct history* history) {
             break;
         }
         
-        // Cria node para o membro
-        make_variable_node(&member_type, member_name, NULL);
+        make_variable_node_simple(&member_type, member_name, NULL);
         struct node* member_node = node_pop();
-        if (member_node) {
-            vector_push(members, &member_node);
-            printf("Membro adicionado: %s %s\n", member_type.type_str, member_name->sval);
-        }
-        
-        // Verifica se há mais membros na mesma linha
-        while (token_next_is_operator(",")) {
-            token_next(); // Consome a vírgula
-            
-            struct token* next_member = token_next();
-            if (next_member->type != TOKEN_TYPE_IDENTIFIER) {
-                compiler_error(current_process, "Esperado nome do membro após vírgula\n");
-                break;
-            }
-            
-            make_variable_node(&member_type, next_member, NULL);
-            member_node = node_pop();
-            if (member_node) {
-                vector_push(members, &member_node);
-                printf("Membro adicionado: %s %s\n", member_type.type_str, next_member->sval);
-            }
-        }
-        
-        // Verifica ponto e vírgula
-        struct token* semicolon = token_next();
-        if (!token_is_symbol(semicolon, ';')) {
-            compiler_error(current_process, "Esperado ';' após declaração de membro\n");
+        if (!member_node) {
+            compiler_error(current_process, "Falha ao criar node para membro da struct\n");
             break;
         }
+        
+        // Verificar se o próximo token é ';' (fim da struct)
+        struct token* next_after_member = token_peek_next();
+        if (next_after_member && token_is_symbol(next_after_member, ';')) {
+            vector_push(members, &member_node);
+            member_count++;
+            printf("Membro adicionado: %s %s\n", member_type.type_str, member_name->sval);
+            token_next(); // Consome o ';'
+            break;
+        }
+        
+        vector_push(members, &member_node);
+        member_count++;
+        printf("Membro adicionado: %s %s\n", member_type.type_str, member_name->sval);
     }
     
-    // Verifica ponto e vírgula após o fechamento da struct
     struct token* struct_semicolon = token_next();
     if (!token_is_symbol(struct_semicolon, ';')) {
-        compiler_error(current_process, "Esperado ';' após fechamento da struct\n");
+        compiler_error(current_process, "Esperado ';' após struct\n");
         vector_free(members);
         return;
     }
     
-    // Cria o node da struct
     struct node struct_node = {
         .type = NODE_TYPE_STRUCT,
         .sval = struct_name->sval,
@@ -1247,8 +1271,187 @@ void parse_struct(struct history* history) {
         return;
     }
     
-    printf("Struct criada com %d membros\n", vector_count(members));
+    printf("Struct criada com %d membros\n", member_count);
     node_push(created_struct);
+    return;
+}
+
+// Nova função para processar structs com a nova sintaxe
+void parse_struct_nova_sintaxe(struct history* history, struct token* struct_name) {
+    struct vector* members = vector_create(sizeof(struct node*));
+    if (!members) {
+        compiler_error(current_process, "Falha ao criar lista de membros da struct\n");
+        return;
+    }
+    
+    int member_count = 0;
+    while (1) {
+        // Ignorar quebras de linha e comentários
+        struct token* slash_open = token_next();
+        while (slash_open && (slash_open->type == TOKEN_TYPE_NEWLINE || slash_open->type == TOKEN_TYPE_COMMENT)) {
+            slash_open = token_next();
+        }
+        if (!slash_open) break;
+        if (token_is_symbol(slash_open, ';')) {
+            // Fim da struct logo após o último membro
+            break;
+        }
+        if (!token_is_operator(slash_open, "/")) {
+            compiler_error(current_process, "Esperado '/' para iniciar membro da struct\n");
+            break;
+        }
+        // Ler o tipo de dados
+        struct token* type_token = token_next();
+        if (!keyword_is_datatype(type_token->sval)) {
+            compiler_error(current_process, "Esperado tipo de dados após '/'\n");
+            break;
+        }
+        
+        // Criar o datatype
+        struct datatype member_type;
+        memset(&member_type, 0, sizeof(struct datatype));
+        
+        if (S_EQ(type_token->sval, "int")) {
+            member_type.type = DATATYPE_INTEGER;
+            member_type.type_str = "int";
+            member_type.size = sizeof(int);
+        } else if (S_EQ(type_token->sval, "float")) {
+            member_type.type = DATATYPE_FLOAT;
+            member_type.type_str = "float";
+            member_type.size = sizeof(float);
+        } else if (S_EQ(type_token->sval, "double")) {
+            member_type.type = DATATYPE_DOUBLE;
+            member_type.type_str = "double";
+            member_type.size = sizeof(double);
+        } else if (S_EQ(type_token->sval, "char")) {
+            member_type.type = DATATYPE_CHAR;
+            member_type.type_str = "char";
+            member_type.size = sizeof(char);
+        } else if (S_EQ(type_token->sval, "bool")) {
+            member_type.type = DATATYPE_INTEGER;
+            member_type.type_str = "bool";
+            member_type.size = sizeof(int);
+        } else {
+            compiler_error(current_process, "Tipo de dados não suportado: %s\n", type_token->sval);
+            break;
+        }
+        
+        // Ler o nome do membro
+        struct token* member_name = token_next();
+        if (!member_name) {
+            compiler_error(current_process, "member_name é NULL\n");
+            break;
+        }
+        
+        // Verificar se é um ponteiro
+        if (member_name->type == TOKEN_TYPE_OPERATOR && S_EQ(member_name->sval, "*")) {
+            // É um ponteiro, ler o nome do membro
+            member_type.pointer_depth = 1;
+            member_name = token_next();
+            if (!member_name || member_name->type != TOKEN_TYPE_IDENTIFIER) {
+                compiler_error(current_process, "Esperado nome do membro após '*'\n");
+                break;
+            }
+        }
+        
+        if (member_name->type != TOKEN_TYPE_IDENTIFIER) {
+            compiler_error(current_process, "Esperado nome do membro da struct\n");
+            break;
+        }
+        
+        // Processar arrays se houver
+        struct datatype* current_dtype = &member_type;
+        while (token_next_is_operator("[")) {
+            struct token* abre = token_next(); // Consome o '['
+            struct token* size_token = token_next();
+            if (size_token->type != TOKEN_TYPE_NUMBER) {
+                compiler_error(current_process, "Esperado número como tamanho do array\n");
+                break;
+            }
+            current_dtype->flags |= DATATYPE_FLAG_IS_ARRAY;
+            current_dtype->size = size_token->inum;
+            struct token* close_bracket = token_next();
+            if (!token_is_operator(close_bracket, "]")) {
+                compiler_error(current_process, "Esperado ']' após tamanho do array\n");
+                break;
+            }
+            // Se houver mais dimensões, criar datatype_secondary
+            if (token_next_is_operator("[")) {
+                current_dtype->datatype_secondary = calloc(1, sizeof(struct datatype));
+                current_dtype = current_dtype->datatype_secondary;
+                memset(current_dtype, 0, sizeof(struct datatype));
+                current_dtype->type = member_type.type;
+                current_dtype->type_str = member_type.type_str;
+                current_dtype->size = 0;
+            }
+        }
+        
+        // Criar o node do membro
+        make_variable_node_simple(&member_type, member_name, NULL);
+        struct node* member_node = node_pop();
+        if (!member_node) {
+            compiler_error(current_process, "Falha ao criar node para membro da struct\n");
+            break;
+        }
+        vector_push(members, &member_node);
+        member_count++;
+        printf("Membro adicionado: %s %s\n", member_type.type_str, member_name->sval);
+        
+        // Agora, garantir que o próximo token seja '\\' e consumi-lo
+        struct token* slash_close = token_peek_next();
+        if (!slash_close) {
+            compiler_error(current_process, "token_peek_next() retornou NULL\n");
+            break;
+        }
+        
+        if (slash_close->type != TOKEN_TYPE_SYMBOL || slash_close->cval != '\\') {
+            compiler_error(current_process, "Esperado '\\' para fechar membro da struct, encontrado: %c\n", slash_close->cval);
+            break;
+        }
+        
+        slash_close = token_next(); // Consome o '\\'
+        
+        // Ignorar quebras de linha e comentários após o fechamento
+        struct token* next_token = token_peek_next();
+        while (next_token && (next_token->type == TOKEN_TYPE_NEWLINE || next_token->type == TOKEN_TYPE_COMMENT)) {
+            token_next();
+            next_token = token_peek_next();
+        }
+        
+        // Verificar o próximo token após ignorar quebras de linha/comentários
+        if (next_token && token_is_operator(next_token, "/")) {
+            // Há mais membros, continuar o loop
+            continue;
+        }
+        if (next_token && token_is_symbol(next_token, ';')) {
+            // Fim da struct
+            token_next(); // Consome o ';'
+            break;
+        }
+        if (next_token) {
+            compiler_error(current_process, "Esperado '/' para novo membro ou ';' para finalizar struct\n");
+            break;
+        }
+        // Se não há próximo token, finalizar a struct
+        break;
+    }
+    
+    struct node struct_node = {
+        .type = NODE_TYPE_STRUCT,
+        .sval = struct_name->sval,
+        .pos = struct_name->pos
+    };
+    
+    struct node* created_struct = node_create(&struct_node);
+    if (!created_struct) {
+        compiler_error(current_process, "Falha ao criar node da struct\n");
+        vector_free(members);
+        return;
+    }
+    
+    printf("Struct criada com %d membros\n", member_count);
+    node_push(created_struct);
+    return;
 }
 
 // Função auxiliar para verificar se um token é parênteses
@@ -1266,7 +1469,6 @@ static bool token_is_parenthesis(struct token* token, char paren) {
     return false;
 }
 
-// Função para processar ifs
 void parse_if(struct history* history) {
     printf("\nProcessando if:\n");
     

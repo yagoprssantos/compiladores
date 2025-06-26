@@ -169,7 +169,8 @@ static bool is_single_operator(char op)
            op == ',' ||
            op == '.' ||
            op == '~' ||
-           op == '?';
+           op == '?' ||
+           op == '\\';
 }
 
 bool op_valid(const char *op)
@@ -208,7 +209,8 @@ bool op_valid(const char *op)
            S_EQ(op, "...") ||
            S_EQ(op, "~") ||
            S_EQ(op, "?") ||
-           S_EQ(op, "%");
+           S_EQ(op, "%") ||
+           S_EQ(op, "\\");
 }
 
 void read_op_flush_back_keep_first(struct buffer *buffer)
