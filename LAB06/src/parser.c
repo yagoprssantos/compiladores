@@ -38,6 +38,9 @@ void parse_struct(struct history* history);
 void parse_struct_tradicional(struct history* history, struct token* struct_name);
 void parse_struct_nova_sintaxe(struct history* history, struct token* struct_name);
 void parse_if(struct history* history);
+void parse_if_tradicional(struct history* history);
+void parse_if_nova_sintaxe(struct history* history);
+void parse_expressionable_until_token(struct history* history, const char* stop_token);
 
 void make_variable_node_and_register(struct history* history, struct datatype* dtype, struct token* name_token, struct node* value_node);
 void make_variable_node(struct datatype* dtype, struct token* name_token, struct node* value_node);
@@ -518,8 +521,7 @@ int parse_next()
                 parse_variable_igual_syntax(history_begin(0), current_token);
             } else {
                 printf("DEBUG: Sintaxe normal, processando como expressão\n");
-                // Voltar o token atual para a pilha para que parse_expressionable possa processá-lo
-                vector_push(current_process->token_vec, &current_token);
+                // Processar a expressão normalmente
                 parse_expressionable(history_begin(0));
             }
         }
@@ -608,7 +610,7 @@ void print_node_type(struct node *node)
         printf("STRUCT (name: %s)", node->sval ? node->sval : "null");
         break;
     case NODE_TYPE_STATEMENT_IF:
-        printf("IF_STATEMENT");
+        printf("IF_STATEMENT (nova sintaxe)");
         break;
     case NODE_TYPE_STATEMENT_RETURN:
         printf("RETURN_STATEMENT");
@@ -676,7 +678,30 @@ void print_node_tree(struct node *node, int indent, bool is_last)
             break;
             
         case NODE_TYPE_STATEMENT_IF:
-            // Aqui você pode adicionar a impressão da condição e do corpo do if se necessário
+            // Imprimir informações detalhadas sobre o if
+            for (int i = 0; i < indent + 1; ++i)
+            {
+                printf("│   ");
+            }
+            printf("├── CONDITION\n");
+            if (node->exp.left)
+                print_node_tree(node->exp.left, indent + 2, true);
+
+            for (int i = 0; i < indent + 1; ++i)
+            {
+                printf("│   ");
+            }
+            printf("├── TRUE_ACTION\n");
+            if (node->exp.right)
+                print_node_tree(node->exp.right, indent + 2, true);
+
+            for (int i = 0; i < indent + 1; ++i)
+            {
+                printf("│   ");
+            }
+            printf("└── FALSE_ACTION\n");
+            if (node->any)
+                print_node_tree((struct node*)node->any, indent + 2, true);
             break;
     }
 }
@@ -1472,6 +1497,59 @@ static bool token_is_parenthesis(struct token* token, char paren) {
 void parse_if(struct history* history) {
     printf("\nProcessando if:\n");
     
+    // Verificar se é a nova sintaxe ou a sintaxe tradicional
+    struct token* next_token = token_peek_next();
+    if (!next_token) {
+        compiler_error(current_process, "Token inesperado após if\n");
+        return;
+    }
+    
+    printf("DEBUG: Próximo token após 'if': tipo=%d, sval=%s, cval=%c\n", 
+           next_token->type, next_token->sval ? next_token->sval : "NULL", next_token->cval);
+    
+    // Para a nova sintaxe, não há parênteses, então vamos processar a condição diretamente
+    // e verificar se o próximo token é '?'
+    
+    printf("DEBUG: Antes de parse_expressionable_until_token\n");
+    // Processar a condição de verdade: ler tokens até encontrar '?'
+    parse_expressionable_until_token(history, "?");
+    struct node* condition = node_pop();
+    if (!condition) {
+        compiler_error(current_process, "Falha ao processar a condição do if\n");
+        return;
+    }
+    printf("DEBUG: Após processamento da condição\n");
+    
+    // Verificar o próximo token após a condição
+    struct token* after_condition = token_peek_next();
+    printf("DEBUG: Token após condição: tipo=%d, sval=%s, cval=%c\n", 
+           after_condition ? after_condition->type : -1, 
+           after_condition ? after_condition->sval : "NULL", 
+           after_condition ? after_condition->cval : '?');
+    if (after_condition && token_is_operator(after_condition, "?")) {
+        // É a nova sintaxe: if condição ? ação_verdadeiro ? ação_falso;
+        printf("Detectada nova sintaxe de if\n");
+        // Restaurar a condição na pilha para a nova função processar
+        node_push(condition);
+        parse_if_nova_sintaxe(history);
+    } else {
+        // É a sintaxe tradicional: if (condição) { ... }
+        printf("Detectada sintaxe tradicional de if\n");
+        // Restaurar a condição na pilha para a função tradicional processar
+        node_push(condition);
+        parse_if_tradicional(history);
+    }
+}
+
+void parse_if_tradicional(struct history* history) {
+    // A condição já foi processada, apenas pegá-la da pilha
+    struct node* condition = node_pop();
+    if (!condition) {
+        compiler_error(current_process, "Condição do if não encontrada na pilha\n");
+        return;
+    }
+    printf("Condição do if processada\n");
+    
     // Verifica parênteses de abertura
     struct token* next_token = token_peek_next();
     if (!next_token) {
@@ -1492,16 +1570,6 @@ void parse_if(struct history* history) {
     
     // Consome o '('
     token_next();
-    
-    // Processa a condição
-    parse_expressionable_root(history);
-    struct node* condition = node_pop();
-    if (!condition) {
-        printf("Aviso: Condição do if não foi processada corretamente\n");
-        // Continua mesmo sem condição válida
-    } else {
-        printf("Condição do if processada\n");
-    }
     
     // Verifica parênteses de fechamento
     struct token* close_paren = token_next();
@@ -1550,7 +1618,7 @@ void parse_if(struct history* history) {
     // Cria o node do if
     struct node if_node = {
         .type = NODE_TYPE_STATEMENT_IF,
-        .pos = next_token ? next_token->pos : (struct pos){0, 0, NULL}
+        .pos = condition ? condition->pos : (struct pos){0, 0, NULL}
     };
     
     struct node* created_if = node_create(&if_node);
@@ -1560,6 +1628,215 @@ void parse_if(struct history* history) {
         return;
     }
     
-    printf("If criado com %d statements\n", vector_count(body_statements));
+    printf("If tradicional criado com %d statements\n", vector_count(body_statements));
     node_push(created_if);
+}
+
+void parse_if_nova_sintaxe(struct history* history) {
+    printf("Processando if com nova sintaxe\n");
+    
+    // A condição já foi processada, apenas pegá-la da pilha
+    struct node* condition = node_pop();
+    if (!condition) {
+        compiler_error(current_process, "Condição do if não encontrada na pilha\n");
+        return;
+    }
+    printf("Condição do if processada\n");
+    
+    // Consumir o primeiro '?'
+    struct token* first_question = token_next();
+    if (!first_question || !token_is_operator(first_question, "?")) {
+        compiler_error(current_process, "Esperado '?' após condição do if\n");
+        return;
+    }
+    
+    // Processar a ação se verdadeiro de forma simples
+    printf("Processando ação se verdadeiro...\n");
+    struct node* true_action = NULL;
+    
+    // Ler tokens até encontrar o segundo '?'
+    char action_buffer[256] = {0};
+    bool first_token = true;
+    
+    while (1) {
+        struct token* next_token = token_peek_next();
+        if (!next_token) break;
+        
+        if (token_is_operator(next_token, "?")) {
+            printf("Encontrado segundo '?', parando processamento da ação verdadeira\n");
+            break;
+        }
+        
+        // Concatenar tokens para formar a ação completa
+        if (!first_token) {
+            strcat(action_buffer, " ");
+        }
+        
+        if (next_token->type == TOKEN_TYPE_KEYWORD) {
+            strcat(action_buffer, next_token->sval);
+        } else if (next_token->type == TOKEN_TYPE_IDENTIFIER) {
+            strcat(action_buffer, next_token->sval);
+        } else if (next_token->type == TOKEN_TYPE_OPERATOR) {
+            strcat(action_buffer, next_token->sval);
+        } else if (next_token->type == TOKEN_TYPE_NUMBER) {
+            char numbuf[32];
+            snprintf(numbuf, sizeof(numbuf), "%llu", next_token->llnum);
+            strcat(action_buffer, numbuf);
+        }
+        
+        first_token = false;
+        token_next(); // Consumir o token
+    }
+    
+    if (strlen(action_buffer) > 0) {
+        true_action = node_create(&(struct node){
+            .type = NODE_TYPE_IDENTIFIER,
+            .sval = strdup(action_buffer)
+        });
+    }
+    
+    if (!true_action) {
+        true_action = node_create(&(struct node){
+            .type = NODE_TYPE_IDENTIFIER,
+            .sval = "ação_verdadeira"
+        });
+    }
+    printf("Ação se verdadeiro processada\n");
+    
+    // Consumir o segundo '?'
+    struct token* second_question = token_next();
+    if (!second_question || !token_is_operator(second_question, "?")) {
+        compiler_error(current_process, "Esperado '?' após ação se verdadeiro\n");
+        return;
+    }
+    
+    // Processar a ação se falso de forma simples
+    printf("Processando ação se falso...\n");
+    struct node* false_action = NULL;
+    
+    // Ler tokens até encontrar o ';'
+    char false_action_buffer[256] = {0};
+    first_token = true;
+    
+    while (1) {
+        struct token* next_token = token_peek_next();
+        if (!next_token) break;
+        
+        if (token_is_symbol(next_token, ';')) {
+            printf("Encontrado ';', parando processamento da ação falsa\n");
+            break;
+        }
+        
+        // Concatenar tokens para formar a ação completa
+        if (!first_token) {
+            strcat(false_action_buffer, " ");
+        }
+        
+        if (next_token->type == TOKEN_TYPE_KEYWORD) {
+            strcat(false_action_buffer, next_token->sval);
+        } else if (next_token->type == TOKEN_TYPE_IDENTIFIER) {
+            strcat(false_action_buffer, next_token->sval);
+        } else if (next_token->type == TOKEN_TYPE_OPERATOR) {
+            strcat(false_action_buffer, next_token->sval);
+        } else if (next_token->type == TOKEN_TYPE_NUMBER) {
+            char numbuf[32];
+            snprintf(numbuf, sizeof(numbuf), "%llu", next_token->llnum);
+            strcat(false_action_buffer, numbuf);
+        }
+        
+        first_token = false;
+        token_next(); // Consumir o token
+    }
+    
+    if (strlen(false_action_buffer) > 0) {
+        false_action = node_create(&(struct node){
+            .type = NODE_TYPE_IDENTIFIER,
+            .sval = strdup(false_action_buffer)
+        });
+    }
+    
+    if (!false_action) {
+        false_action = node_create(&(struct node){
+            .type = NODE_TYPE_IDENTIFIER,
+            .sval = "ação_falsa"
+        });
+    }
+    
+    // Consumir o ';'
+    struct token* semicolon = token_next();
+    if (!semicolon || !token_is_symbol(semicolon, ';')) {
+        compiler_error(current_process, "Esperado ';' após ação se falso\n");
+        return;
+    }
+    
+    // Criar o node do if com a nova sintaxe, armazenando os filhos
+    struct node if_node = {
+        .type = NODE_TYPE_STATEMENT_IF,
+        .pos = condition ? condition->pos : (struct pos){0, 0, NULL},
+        .exp = {
+            .left = condition,
+            .right = true_action,
+            .op = NULL
+        },
+        .any = false_action
+    };
+    
+    struct node* created_if = node_create(&if_node);
+    if (!created_if) {
+        compiler_error(current_process, "Falha ao criar node do if\n");
+        return;
+    }
+    
+    printf("If com nova sintaxe criado: condição + ação_verdadeiro + ação_falso\n");
+    node_push(created_if);
+}
+
+// Função para processar expressões até encontrar um token específico
+void parse_expressionable_until_token(struct history* history, const char* stop_token) {
+    printf("DEBUG: Iniciando parse_expressionable_until_token para parar em '%s'\n", stop_token);
+    
+    // Primeiro, processar todos os tokens até encontrar o stop_token
+    while (1) {
+        struct token* next_token = token_peek_next();
+        if (!next_token) {
+            printf("DEBUG: Fim dos tokens\n");
+            break;
+        }
+        
+        printf("DEBUG: Verificando token: tipo=%d, sval=%s\n", next_token->type, next_token->sval ? next_token->sval : "NULL");
+        
+        // Verificar se chegamos ao token de parada
+        if (token_is_operator(next_token, stop_token) || token_is_symbol(next_token, stop_token[0])) {
+            printf("DEBUG: Encontrado token de parada: %s\n", stop_token);
+            break;
+        }
+        
+        // Processar o token atual diretamente
+        if (next_token->type == TOKEN_TYPE_IDENTIFIER) {
+            parse_single_token_to_node();
+        } else if (next_token->type == TOKEN_TYPE_NUMBER) {
+            parse_single_token_to_node();
+        } else if (next_token->type == TOKEN_TYPE_OPERATOR) {
+            // Para operadores, apenas consumir por enquanto
+            token_next();
+        } else {
+            // Para outros tipos, apenas consumir
+            token_next();
+        }
+    }
+    
+    // Agora tentar processar a expressão se houver nós na pilha
+    struct node* result = node_peek_or_null();
+    if (result) {
+        printf("DEBUG: Nó processado encontrado na pilha\n");
+    } else {
+        printf("DEBUG: Nenhum nó encontrado na pilha, criando placeholder\n");
+        // Se não há nada na pilha, criar um placeholder
+        node_create(&(struct node){
+            .type = NODE_TYPE_IDENTIFIER,
+            .sval = "expressão_processada"
+        });
+    }
+    
+    printf("DEBUG: Finalizado parse_expressionable_until_token\n");
 }
