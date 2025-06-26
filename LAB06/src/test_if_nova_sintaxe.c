@@ -4,3 +4,7 @@
 if c? return 0 ? return 1;
 if x==y ? x=x+1 ? x=x-1;
 if a>b ? a=a+1 ? a=a-1;
+
+A igual int;
+
+struct ABC /int A\ /int B\ /int C\;

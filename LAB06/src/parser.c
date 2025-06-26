@@ -510,17 +510,13 @@ int parse_next()
         {
             // Consumir o token atual (identificador)
             struct token* current_token = token_next();
-            printf("DEBUG: Token atual é identificador: %s\n", current_token->sval);
             
             // Verificar o próximo token
             struct token* next_token = token_peek_next();
-            printf("DEBUG: Próximo token: %s\n", next_token ? next_token->sval : "NULL");
             
             if (next_token && token_is_keyword(next_token, "igual")) {
-                printf("DEBUG: Detectada sintaxe 'igual', chamando parse_variable_igual_syntax\n");
                 parse_variable_igual_syntax(history_begin(0), current_token);
             } else {
-                printf("DEBUG: Sintaxe normal, processando como expressão\n");
                 // Processar a expressão normalmente
                 parse_expressionable(history_begin(0));
             }
@@ -903,14 +899,11 @@ void parse_variable_function_or_struct_union(struct history* history) {
 
 // Nova função para processar declarações usando a sintaxe "igual"
 void parse_variable_igual_syntax(struct history* history, struct token* name_token) {
-    printf("DEBUG: Iniciando parse_variable_igual_syntax\n");
-    
     // Verificar se o token do nome é válido
     if (name_token->type != TOKEN_TYPE_IDENTIFIER) {
         compiler_error(current_process, "Esperado nome da variável antes de 'igual'\n");
         return;
     }
-    printf("DEBUG: Nome da variável: %s\n", name_token->sval);
     
     // Segundo token deve ser "igual"
     struct token* igual_token = token_next();
@@ -918,7 +911,6 @@ void parse_variable_igual_syntax(struct history* history, struct token* name_tok
         compiler_error(current_process, "Esperado 'igual' após nome da variável\n");
         return;
     }
-    printf("DEBUG: Token 'igual' encontrado\n");
     
     // Terceiro token deve ser o tipo de dados
     struct token* type_token = token_next();
@@ -926,7 +918,6 @@ void parse_variable_igual_syntax(struct history* history, struct token* name_tok
         compiler_error(current_process, "Esperado tipo de dados após 'igual'\n");
         return;
     }
-    printf("DEBUG: Tipo de dados: %s\n", type_token->sval);
     
     // Criar o datatype baseado no tipo especificado
     struct datatype dtype;
@@ -961,11 +952,8 @@ void parse_variable_igual_syntax(struct history* history, struct token* name_tok
         return;
     }
     
-    printf("DEBUG: Datatype criado - tipo: %s, tamanho: %zu\n", dtype.type_str, dtype.size);
-    
     // Processar a variável normalmente
     parse_variable(&dtype, name_token, history);
-    printf("DEBUG: parse_variable concluído\n");
 }
 
 void parse_keyword(struct history *history) { // LAB 5
@@ -1495,8 +1483,6 @@ static bool token_is_parenthesis(struct token* token, char paren) {
 }
 
 void parse_if(struct history* history) {
-    printf("\nProcessando if:\n");
-    
     // Verificar se é a nova sintaxe ou a sintaxe tradicional
     struct token* next_token = token_peek_next();
     if (!next_token) {
@@ -1504,13 +1490,9 @@ void parse_if(struct history* history) {
         return;
     }
     
-    printf("DEBUG: Próximo token após 'if': tipo=%d, sval=%s, cval=%c\n", 
-           next_token->type, next_token->sval ? next_token->sval : "NULL", next_token->cval);
-    
     // Para a nova sintaxe, não há parênteses, então vamos processar a condição diretamente
     // e verificar se o próximo token é '?'
     
-    printf("DEBUG: Antes de parse_expressionable_until_token\n");
     // Processar a condição de verdade: ler tokens até encontrar '?'
     parse_expressionable_until_token(history, "?");
     struct node* condition = node_pop();
@@ -1518,23 +1500,16 @@ void parse_if(struct history* history) {
         compiler_error(current_process, "Falha ao processar a condição do if\n");
         return;
     }
-    printf("DEBUG: Após processamento da condição\n");
     
     // Verificar o próximo token após a condição
     struct token* after_condition = token_peek_next();
-    printf("DEBUG: Token após condição: tipo=%d, sval=%s, cval=%c\n", 
-           after_condition ? after_condition->type : -1, 
-           after_condition ? after_condition->sval : "NULL", 
-           after_condition ? after_condition->cval : '?');
     if (after_condition && token_is_operator(after_condition, "?")) {
         // É a nova sintaxe: if condição ? ação_verdadeiro ? ação_falso;
-        printf("Detectada nova sintaxe de if\n");
         // Restaurar a condição na pilha para a nova função processar
         node_push(condition);
         parse_if_nova_sintaxe(history);
     } else {
         // É a sintaxe tradicional: if (condição) { ... }
-        printf("Detectada sintaxe tradicional de if\n");
         // Restaurar a condição na pilha para a função tradicional processar
         node_push(condition);
         parse_if_tradicional(history);
@@ -1548,7 +1523,6 @@ void parse_if_tradicional(struct history* history) {
         compiler_error(current_process, "Condição do if não encontrada na pilha\n");
         return;
     }
-    printf("Condição do if processada\n");
     
     // Verifica parênteses de abertura
     struct token* next_token = token_peek_next();
@@ -1607,7 +1581,6 @@ void parse_if_tradicional(struct history* history) {
             struct node* statement = node_pop();
             if (statement) {
                 vector_push(body_statements, &statement);
-                printf("Statement adicionado ao if\n");
             }
         } else {
             // Se não conseguiu processar, avança o token
@@ -1628,20 +1601,16 @@ void parse_if_tradicional(struct history* history) {
         return;
     }
     
-    printf("If tradicional criado com %d statements\n", vector_count(body_statements));
     node_push(created_if);
 }
 
 void parse_if_nova_sintaxe(struct history* history) {
-    printf("Processando if com nova sintaxe\n");
-    
     // A condição já foi processada, apenas pegá-la da pilha
     struct node* condition = node_pop();
     if (!condition) {
         compiler_error(current_process, "Condição do if não encontrada na pilha\n");
         return;
     }
-    printf("Condição do if processada\n");
     
     // Consumir o primeiro '?'
     struct token* first_question = token_next();
@@ -1651,7 +1620,6 @@ void parse_if_nova_sintaxe(struct history* history) {
     }
     
     // Processar a ação se verdadeiro de forma simples
-    printf("Processando ação se verdadeiro...\n");
     struct node* true_action = NULL;
     
     // Ler tokens até encontrar o segundo '?'
@@ -1663,7 +1631,6 @@ void parse_if_nova_sintaxe(struct history* history) {
         if (!next_token) break;
         
         if (token_is_operator(next_token, "?")) {
-            printf("Encontrado segundo '?', parando processamento da ação verdadeira\n");
             break;
         }
         
@@ -1701,7 +1668,6 @@ void parse_if_nova_sintaxe(struct history* history) {
             .sval = "ação_verdadeira"
         });
     }
-    printf("Ação se verdadeiro processada\n");
     
     // Consumir o segundo '?'
     struct token* second_question = token_next();
@@ -1711,7 +1677,6 @@ void parse_if_nova_sintaxe(struct history* history) {
     }
     
     // Processar a ação se falso de forma simples
-    printf("Processando ação se falso...\n");
     struct node* false_action = NULL;
     
     // Ler tokens até encontrar o ';'
@@ -1723,7 +1688,6 @@ void parse_if_nova_sintaxe(struct history* history) {
         if (!next_token) break;
         
         if (token_is_symbol(next_token, ';')) {
-            printf("Encontrado ';', parando processamento da ação falsa\n");
             break;
         }
         
@@ -1787,27 +1751,20 @@ void parse_if_nova_sintaxe(struct history* history) {
         return;
     }
     
-    printf("If com nova sintaxe criado: condição + ação_verdadeiro + ação_falso\n");
     node_push(created_if);
 }
 
 // Função para processar expressões até encontrar um token específico
 void parse_expressionable_until_token(struct history* history, const char* stop_token) {
-    printf("DEBUG: Iniciando parse_expressionable_until_token para parar em '%s'\n", stop_token);
-    
     // Primeiro, processar todos os tokens até encontrar o stop_token
     while (1) {
         struct token* next_token = token_peek_next();
         if (!next_token) {
-            printf("DEBUG: Fim dos tokens\n");
             break;
         }
         
-        printf("DEBUG: Verificando token: tipo=%d, sval=%s\n", next_token->type, next_token->sval ? next_token->sval : "NULL");
-        
         // Verificar se chegamos ao token de parada
         if (token_is_operator(next_token, stop_token) || token_is_symbol(next_token, stop_token[0])) {
-            printf("DEBUG: Encontrado token de parada: %s\n", stop_token);
             break;
         }
         
@@ -1827,16 +1784,11 @@ void parse_expressionable_until_token(struct history* history, const char* stop_
     
     // Agora tentar processar a expressão se houver nós na pilha
     struct node* result = node_peek_or_null();
-    if (result) {
-        printf("DEBUG: Nó processado encontrado na pilha\n");
-    } else {
-        printf("DEBUG: Nenhum nó encontrado na pilha, criando placeholder\n");
+    if (!result) {
         // Se não há nada na pilha, criar um placeholder
         node_create(&(struct node){
             .type = NODE_TYPE_IDENTIFIER,
             .sval = "expressão_processada"
         });
     }
-    
-    printf("DEBUG: Finalizado parse_expressionable_until_token\n");
 }
