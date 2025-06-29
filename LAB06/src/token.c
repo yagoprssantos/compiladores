@@ -13,8 +13,7 @@ bool token_is_symbol(struct token *token, char value)
 bool discart_token(struct token *token)
 {
     return (token->type == TOKEN_TYPE_NEWLINE) ||
-           (token->type == TOKEN_TYPE_COMMENT) ||
-           token_is_symbol(token, '\\');
+           (token->type == TOKEN_TYPE_COMMENT);
 }
 
 bool token_is_operator(struct token* token, const char* val) {
