@@ -276,8 +276,11 @@ int parse_exp(struct history *history)
 
 void parse_keyword_for_global() {
     parse_keyword(history_begin(0));
-    // TODO: Essa funcao ainda nao cria o node corretamente.
     struct node* node = node_pop();
+    if (node) {
+        // Adiciona o node à árvore global
+        vector_push(current_process->node_tree_vec, &node);
+    }
 }
 
 void parse_identifier(struct history* history) {
