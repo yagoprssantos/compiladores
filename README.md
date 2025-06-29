@@ -6,6 +6,7 @@ Este repositório contém os trabalhos realizados pelo **Grupo 7** na disciplina
 
 ## Integrantes do Grupo
 
+- **Gabriel Andrade Silva Pinto**
 - **Isabela Garcia Godinho**
 - **João Victor Azevedo dos Santos**
 - **Luiz Eduardo Campos Dias**
@@ -78,11 +79,40 @@ O repositório está organizado em pastas, cada uma representando um laboratóri
 
 ---
 
-### **LAB05 - _a ser feito_**
+### **LAB05 - Gerenciamento de Escopo e Resolução de Símbolos**
+
+- **Objetivo**: Implementar gerenciamento de escopo e resolução de símbolos no compilador.
+- **Atividades**:
+  - Implementação do sistema de escopo para variáveis e funções.
+  - Criação de estruturas para gerenciar diferentes níveis de escopo.
+  - Desenvolvimento do resolvedor de símbolos para identificar e validar declarações.
+  - Integração do sistema de escopo com o parser existente.
+  - Implementação de verificações de tipo e validação de símbolos.
+  - Criação de testes para validar o gerenciamento de escopo.
+- **Resultados**:
+  - Sistema de escopo funcional para variáveis e funções.
+  - Resolvedor de símbolos integrado ao compilador.
+  - Validação de tipos e declarações implementada.
+  - Testes abrangentes para o sistema de escopo.
 
 ---
 
-### **LAB06 - _a ser feito_**
+### **LAB06 - Novas Sintaxes e Funcionalidades Avançadas**
+
+- **Objetivo**: Implementar novas sintaxes alternativas e funcionalidades avançadas no compilador.
+- **Atividades**:
+  - **Nova Sintaxe para Declaração de Variáveis**: Implementação da sintaxe `A igual int;` usando a palavra-chave "igual".
+  - **Nova Sintaxe para Declaração de Structs**: Implementação da sintaxe `struct ABC /int A\ /int B\ /int C\;` usando separadores alternativos.
+  - **Nova Sintaxe para Declaração de If/Else**: Implementação da sintaxe `if A>B ? return 0 ? return 1;` usando operadores "?".
+  - Suporte a arrays multidimensionais e ponteiros nas novas sintaxes.
+  - Tratamento robusto de erros e validação de sintaxe.
+  - Integração das novas funcionalidades com o sistema existente.
+- **Resultados**:
+  - Três novas sintaxes alternativas implementadas e funcionais.
+  - Suporte completo a tipos de dados complexos (arrays, ponteiros).
+  - Sistema de tratamento de erros robusto.
+  - Testes abrangentes para todas as novas funcionalidades.
+  - Compilador expandido com funcionalidades avançadas.
 
 ---
 
@@ -101,8 +131,39 @@ O repositório está organizado em pastas, cada uma representando um laboratóri
    ./main
    ```
 
+### Exemplo para LAB06
+
+```bash
+cd LAB06/src
+make
+./main test.c
+```
+
 ## Testes e Resultados
 
 Cada laboratório inclui testes específicos para validar as funcionalidades implementadas. Os testes podem ser executados compilando o projeto e rodando o executável gerado. Consulte os arquivos `README.md` de cada laboratório para mais detalhes sobre os testes realizados e seus resultados.
+
+### Funcionalidades Implementadas
+
+- **Estruturas Auxiliares**: Vetores dinâmicos e buffers
+- **Análise Léxica**: Reconhecimento de tokens, números, strings, operadores
+- **Análise Sintática**: Parser e construção de AST
+- **Manipulação de Expressões**: Precedência de operadores e avaliação
+- **Gerenciamento de Escopo**: Controle de variáveis e funções
+- **Resolução de Símbolos**: Validação de declarações e tipos
+- **Sintaxes Alternativas**: Novas formas de declarar variáveis, structs e condicionais
+
+---
+
+## Status do Projeto
+
+✅ **LAB01** - Concluído  
+✅ **LAB02** - Concluído  
+✅ **LAB03** - Concluído  
+✅ **LAB04** - Concluído  
+✅ **LAB05** - Concluído  
+✅ **LAB06** - Concluído  
+
+O projeto está **100% completo** com todas as funcionalidades implementadas e testadas.
 
 ---
